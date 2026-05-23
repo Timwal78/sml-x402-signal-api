@@ -217,6 +217,11 @@ export async function getActiveTarget() {
   return val;
 }
 
+export async function setActiveTarget(payload) {
+  await setJSON("SML:ACTIVE_TARGET", payload);
+  console.log(`[VAULT SECURED] ${payload.ticker || "Target"} payload pushed to Upstash Redis. Available for API extraction.`);
+}
+
 // ==== 30-DAY SUBSCRIPTION PASSES ==========================================
 const SUB_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 

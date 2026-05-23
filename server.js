@@ -11,7 +11,7 @@ import { isAddress } from "viem";
 import {
   recordPaidCall, loyaltyStatus, redeem, consumeFreeCall,
   recordAffiliate, affiliateStatus, rosterAdd, AFFILIATE_CONFIG,
-  getActiveTarget, createSubscriptionToken, validateSubscriptionToken
+  getActiveTarget, setActiveTarget, createSubscriptionToken, validateSubscriptionToken
 } from "./ledger.js";
 
 const app = express();
@@ -154,6 +154,34 @@ app.get("/", (_req, res) => {
     facilitator: TESTNET ? "x402.org" : "cdp"
   });
 });
-app.get("/agents.json", (req, res) => res.sendFile(process.cwd() + "/agents.json"));
+
+// ---- GHOST ROUTER (TradingView Webhook Receiver) -------------------------
+const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1507577494918664355/Jq3SpGZDaIKh-qRz-9_jdTgVkUy7m1_ofLum1LrNEWak0ONs1frpNv2S6diCAhg_1chh";
+
+app.post("/webhook/tv", async (req, res) => {
+  try {
+    const p = req.body;
+    if (!p || !p.ticker || !p.action) return res.status(400).json({ error: "invalid_payload" });
+    console.log(`\n[MATRIX SNAP] ${p.action} triggered on ${p.ticker}`);
+    
+    // 1. Write to Upstash Vault
+    await setActiveTarget(p);
+    
+    // 2. Broadcast to Discord
+    const title = p.system === "SML_FTD_Hunter" ? "FTD HUNTER" : "LEVIATHAN SNAP";
+    const msg = `🚨 **${title}**: **${p.action}** triggered on **${p.ticker}**! (Live across 70 curated equities)`;
+    fetch(DISCORD_WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: msg })
+    }).catch(e => console.error("Discord err:", e.message));
+
+    res.status(200).json({ status: "secured" });
+  } catch (e) {
+    console.error("Webhook err:", e);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 app.listen(PORT, () => console.log(`SML x402 v2.1 BEASTMODE on :${PORT} | chains: ${ALL_CHAINS.map(c => c.id).join(", ")}`));
