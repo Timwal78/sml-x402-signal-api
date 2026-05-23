@@ -165,7 +165,7 @@ export const _config = { TIERS, REF_REFERRER_BONUS, REF_REFEREE_WELCOME };
 // ==== AFFILIATE REVENUE-SHARE (USDC, acquisition lever) ===================
 // Affiliates pass ?aff=0x.. or header X-Affiliate-ID. A % of each paid call
 // accrues to their pending balance, paid out in USDC on Base via payout.js.
-const AFFILIATE_RATE = Number(process.env.AFFILIATE_RATE || 0.30); // 30% default
+const AFFILIATE_RATE = Number(process.env.AFFILIATE_RATE || 0.15); // 15% default
 const affKey = (w) => `sml:aff:${norm(w)}`;
 
 export async function recordAffiliate(affiliate, amountUsd) {
@@ -206,3 +206,39 @@ export async function markAffiliatePaid(w, amountUsd, txHash) {
   return a;
 }
 export const AFFILIATE_CONFIG = { AFFILIATE_RATE };
+
+// ==== DECOUPLED MATRIX PULL (Shared Memory Vault) =========================
+// Fetches the latest Leviathan Matrix state written by the Ghost Router.
+export async function getActiveTarget() {
+  const val = await getJSON("SML:ACTIVE_TARGET");
+  if (!val) {
+    return { status: "no_active_target", message: "Matrix is silent." };
+  }
+  return val;
+}
+
+// ==== 30-DAY SUBSCRIPTION PASSES ==========================================
+const SUB_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export async function createSubscriptionToken(wallet, tier) {
+  const tokenId = crypto.randomBytes(16).toString("base64url");
+  const exp = Date.now() + SUB_TTL_MS;
+  await setJSON(`sml:sub:${tokenId}`, { wallet: norm(wallet), tier, exp });
+  const body = Buffer.from(JSON.stringify({ tokenId, exp, tier })).toString("base64url");
+  return { token: `${body}.${sign(body)}`, tier, expiresAt: new Date(exp).toISOString() };
+}
+
+export async function validateSubscriptionToken(authHeader, requiredTier) {
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
+  const tok = authHeader.slice(7);
+  const [body, sig] = tok.split(".");
+  if (!body || !sig || sign(body) !== sig) return false;
+  let parsed;
+  try { parsed = JSON.parse(Buffer.from(body, "base64url").toString()); } catch { return false; }
+  if (Date.now() > parsed.exp) return false;
+  const rec = await getJSON(`sml:sub:${parsed.tokenId}`);
+  if (!rec) return false;
+  if (requiredTier === "standard" && rec.tier !== "standard" && rec.tier !== "vip") return false;
+  if (requiredTier === "vip" && rec.tier !== "vip") return false;
+  return true;
+}

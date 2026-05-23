@@ -6,12 +6,12 @@
 import express from "express";
 import { paymentMiddleware } from "x402-express";
 import { facilitator as cdpFacilitator } from "@coinbase/x402";
-import { getTeaser, getSignal, getRegime, getSqueeze } from "./engine.js";
 import { signPayload, PUBLIC_KEY } from "./sign.js";
 import { isAddress } from "viem";
 import {
   recordPaidCall, loyaltyStatus, redeem, consumeFreeCall,
-  recordAffiliate, affiliateStatus, rosterAdd, AFFILIATE_CONFIG
+  recordAffiliate, affiliateStatus, rosterAdd, AFFILIATE_CONFIG,
+  getActiveTarget, createSubscriptionToken, validateSubscriptionToken
 } from "./ledger.js";
 
 const app = express();
@@ -38,15 +38,12 @@ const meta = (chainId, desc, props) => ({
   outputSchema: { type: "object", properties: props }
 });
 const TIERS = [
-  { name: "signal", price: "$0.01", priceN: 0.01, fn: getSignal,
-    desc: "SML equities signal: directional bias, momentum, 0-100 composite score from live market data. US stocks + meme/squeeze names (GME, AMC, IWM)",
-    props: { bias: { type: "string" }, momentum: { type: "string" }, score: { type: "number" } } },
-  { name: "regime", price: "$0.05", priceN: 0.05, fn: getRegime,
-    desc: "SML full market regime: trend, momentum, volatility regime, RVOL, range position, trend persistence, MA stack",
-    props: { volRegime: { type: "string" }, rvol: { type: "number" }, score: { type: "number" } } },
-  { name: "squeeze", price: "$0.25", priceN: 0.25, fn: getSqueeze,
-    desc: "SML SQUEEZE PRESSURE engine — short-squeeze / coiled-spring detector for US equities. 0-100 pressure score + state + components. The only x402 service built for equity squeeze mechanics",
-    props: { squeezePressure: { type: "number" }, squeezeState: { type: "string" }, components: { type: "object" } } }
+  { name: "matrix/subscribe/standard", price: "$250.00", priceN: 250.00, noTicker: true,
+    desc: "30-Day Real-Time Bearer Token for Leviathan Matrix",
+    props: { token: { type: "string" }, tier: { type: "string" }, expiresAt: { type: "string" } } },
+  { name: "matrix/subscribe/vip", price: "$1000.00", priceN: 1000.00, noTicker: true,
+    desc: "30-Day VIP Zero-Hop Token for Leviathan Matrix",
+    props: { token: { type: "string" }, tier: { type: "string" }, expiresAt: { type: "string" } } }
 ];
 
 // ---- CHAINS (real, CDP-settable, supported by x402-express) --------------
@@ -59,8 +56,10 @@ const ALL_CHAINS = [...EVM_CHAINS, ...SVM_CHAINS];
 
 function buildRoutes(chains) {
   const r = {};
-  for (const ch of chains) for (const t of TIERS)
-    r[`GET ${ch.prefix}/${t.name}/[ticker]`] = { price: t.price, network: ch.id, config: meta(ch.id, t.desc, t.props) };
+  for (const ch of chains) for (const t of TIERS) {
+    const path = t.noTicker ? `GET ${ch.prefix}/${t.name}` : `GET ${ch.prefix}/${t.name}/[ticker]`;
+    r[path] = { price: t.price, network: ch.id, config: meta(ch.id, t.desc, t.props) };
+  }
   return r;
 }
 
@@ -81,23 +80,30 @@ function paidJson(res, data, info, req) {
   res.json(signPayload({ ...data, paidWith: "x402", chain: info.chain, txHash: txOf(req), loyalty: info.loyalty }));
 }
 
-// ---- FREE: teaser --------------------------------------------------------
-app.get("/signal/:ticker/teaser", async (req, res) => {
-  try { res.json(signPayload(await getTeaser(req.params.ticker.toUpperCase()))); } catch (e) { fail(res, e); }
+// ---- DECOUPLED MATRIX PULL ROUTES (Token Required) -----------------------
+app.get("/matrix/live", async (req, res) => {
+  if (!await validateSubscriptionToken(req.headers.authorization, "standard")) {
+    return res.status(402).json({ error: "payment_required", message: "Pay 250 USDC at /matrix/subscribe/standard for a 30-day token." });
+  }
+  res.json(await getActiveTarget());
 });
 
-// ---- FREE-CALL BYPASS (loyalty credits -> base $0.01 signal only) --------
-app.use(async (req, res, next) => {
-  if (req.method !== "GET") return next();
-  const seg = req.path.split("/").filter(Boolean);          // base signal = ["signal", TICKER]
-  if (seg.length !== 2 || seg[0] !== "signal") return next();
-  try {
-    if (await consumeFreeCall(req.headers.authorization)) {
-      const d = await getSignal(seg[1].toUpperCase());
-      return res.json(signPayload({ ...d, paidWith: "loyalty-credit" }));
-    }
-  } catch (e) { return fail(res, e); }
-  next();
+app.get("/matrix/vip", async (req, res) => {
+  if (!await validateSubscriptionToken(req.headers.authorization, "vip")) {
+    return res.status(402).json({ error: "payment_required", message: "Pay 1000 USDC at /matrix/subscribe/vip for a 30-day VIP token." });
+  }
+  res.json(await getActiveTarget());
+});
+
+app.get("/matrix/delayed", async (req, res) => {
+  const data = await getActiveTarget();
+  if (data.status === "no_active_target") return res.json(data);
+  const tsMs = (data.timestamp > 9999999999) ? data.timestamp : (data.timestamp * 1000);
+  const ageMs = Date.now() - (tsMs || Date.now());
+  if (ageMs < 65 * 60 * 1000) {
+    return res.status(403).json({ error: "too_early", message: `Delayed payload available in ${Math.ceil((65 * 60 * 1000 - ageMs) / 60000)} minutes.` });
+  }
+  res.json(data);
 });
 
 // ---- x402 PAYWALLS (EVM + optional Solana) -------------------------------
@@ -109,8 +115,15 @@ if (SVM_CHAINS.length) {
 
 // ---- PAID ROUTES (generated per chain x tier) ----------------------------
 for (const ch of ALL_CHAINS) for (const t of TIERS) {
-  app.get(`${ch.prefix}/${t.name}/:ticker`, async (req, res) => {
-    try { paidJson(res, await t.fn(req.params.ticker.toUpperCase()), await settle(req, t.priceN, ch.id), req); }
+  const route = t.noTicker ? `${ch.prefix}/${t.name}` : `${ch.prefix}/${t.name}/:ticker`;
+  app.get(route, async (req, res) => {
+    try {
+      const info = await settle(req, t.priceN, ch.id);
+      const payer = payerOf(req);
+      const tierLabel = t.name.includes("vip") ? "vip" : "standard";
+      const tokenData = await createSubscriptionToken(payer || "0xAnonymous", tierLabel);
+      paidJson(res, tokenData, info, req);
+    }
     catch (e) { fail(res, e); }
   });
 }
@@ -127,13 +140,13 @@ app.post("/redeem", async (req, res) => { try { res.json(await redeem(req.body |
 // ---- SERVICE INDEX (free) ------------------------------------------------
 app.get("/", (_req, res) => {
   const tiersFor = (prefix) => ({
-    signal: `GET ${prefix}/signal/:ticker ($0.01)`, regime: `GET ${prefix}/regime/:ticker ($0.05)`, squeeze: `GET ${prefix}/squeeze/:ticker ($0.25)`
+    standard: `GET ${prefix}/matrix/subscribe/standard ($250)`, vip: `GET ${prefix}/matrix/subscribe/vip ($1000)`
   });
   const chains = {};
   for (const ch of ALL_CHAINS) chains[ch.id] = tiersFor(ch.prefix);
   res.json({
-    service: "SML x402 Signal API v2.1 — equities & squeeze, multi-chain",
-    teaser: "GET /signal/:ticker/teaser (free)",
+    service: "SML Leviathan Matrix API — Institutional Equity Squeeze Pulls",
+    pulls: { live: "GET /matrix/live", vip: "GET /matrix/vip", delayed: "GET /matrix/delayed (free)" },
     chains, asset: "USDC",
     loyalty: { status: "GET /loyalty/:wallet", redeem: "GET /redeem/info -> POST /redeem", referral: "add ?ref=0x.." },
     affiliate: { status: "GET /affiliate/:wallet", rate: AFFILIATE_CONFIG.AFFILIATE_RATE, attribute: "add ?aff=0x.. or header X-Affiliate-ID" },
