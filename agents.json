@@ -1,15 +1,76 @@
 {
+  "version": "1.0",
+  "organization": {
+    "name": "ScriptMasterLabs",
+    "description": "Sovereign AI Infrastructure & Enterprise B2B SaaS",
+    "email": "scriptmasterlabs@gmail.com",
+    "url": "https://www.scriptmasterlabs.com"
+  },
+  "endpoints": {
+    "llms": "https://www.scriptmasterlabs.com/llms.txt",
+    "llms_full": "https://www.scriptmasterlabs.com/llms-full.txt"
+  },
+  "agents": [
+    {
+      "name": "Graphify Engine",
+      "description": "Sovereign Knowledge Graph construction engine for institutions.",
+      "type": "Data Infrastructure",
+      "status": "Alpha"
+    },
+    {
+      "name": "GitNexus",
+      "description": "Code Intelligence Mapping and blast radius detection system.",
+      "type": "Developer Tools",
+      "status": "Alpha"
+    },
+    {
+      "name": "Superpowers Protocol",
+      "description": "AI Agent Orchestration and standardized execution methodology.",
+      "type": "Orchestration Layer",
+      "status": "Alpha"
+    },
+    {
+      "name": "OpenMythos",
+      "description": "Secure LLM Simulation Layer and Prompt Engineering sandbox.",
+      "type": "Security & Simulation",
+      "status": "Alpha"
+    },
+    {
+      "name": "XRPL Copy-Trader Engine",
+      "description": "Institutional mirror trading engine on the XRP Ledger.",
+      "type": "Blockchain Infrastructure",
+      "status": "Production"
+    },
+    {
+      "name": "Memecoin Launchpad (Forge)",
+      "description": "Automated AMM migration and bonding curve launchpad for XRPL.",
+      "type": "Blockchain Infrastructure",
+      "status": "Production"
+    },
+    {
+      "name": "Pulse-Verify Notary",
+      "description": "Autonomous AI settlement notary across XRPL and Xahau.",
+      "type": "Blockchain Infrastructure",
+      "status": "Production"
+    },
+    {
+      "name": "Xahau Hooks Intelligence",
+      "description": "Native smart contract automation and Hook deployment services.",
+      "type": "Blockchain Infrastructure",
+      "status": "Production"
+    }
+  ],
   "x402": {
     "service": "SML Leviathan Matrix API",
     "base_url": "https://sml-x402-signal-api.onrender.com",
     "network": "base",
     "payment": "USDC via x402",
     "endpoints": [
-      { "path": "/matrix/delayed",                 "price": "free",   "desc": "Tier 0 (Shadow): 65-minute artificially delayed payload for backtesting" },
-      { "path": "/matrix/subscribe/standard",      "price": "$250",   "desc": "Tier 1 (Standard): Checkout route. Buys a 30-Day Real-Time Token" },
-      { "path": "/matrix/live",                    "price": "free",   "desc": "Real-time pull. Requires 30-Day Standard Token in headers" },
-      { "path": "/matrix/subscribe/vip",           "price": "$1000",  "desc": "Tier 5 (VIP): Checkout route. Buys a 30-Day VIP Zero-Hop Token" },
-      { "path": "/matrix/vip",                     "price": "free",   "desc": "Zero-hop pull. Requires 30-Day VIP Token in headers" }
+      { "path": "/matrix/delayed", "price": "free", "desc": "Tier 0 (Shadow): 65-minute artificially delayed payload for backtesting" },
+      { "path": "/matrix/subscribe/standard", "price": "$250", "desc": "Tier 1 (Standard): Checkout route. Buys a 30-Day Real-Time Token" },
+      { "path": "/matrix/live", "price": "free", "desc": "Real-time pull. Requires 30-Day Standard Token in headers" },
+      { "path": "/matrix/subscribe/vip", "price": "$1000", "desc": "Tier 5 (VIP): Checkout route. Buys a 30-Day VIP Zero-Hop Token" },
+      { "path": "/matrix/vip", "price": "free", "desc": "Zero-hop pull. Requires 30-Day VIP Token in headers" }
     ],
     "loyalty": "tiered free-call credits + referral",
     "affiliate": { "rate": 0.15, "param": "?aff=0x..", "settlement": "USDC on Base" },
