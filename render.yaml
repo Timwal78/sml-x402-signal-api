@@ -1,0 +1,25 @@
+# 24/7 ALWAYS-ON. plan: starter = $7/mo/service, NO sleep, NO cold starts.
+# (Render free tier sleeps after 15 min and cold-starts 30-60s — do NOT use it
+#  for a live paid API: cold starts = failed agent calls = lost revenue.)
+services:
+  - type: web
+    name: sml-x402-signal-api
+    runtime: node
+    plan: starter
+    healthCheckPath: /health
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - { key: PAY_TO_WALLET, sync: false }
+      - { key: SOLANA_PAY_TO, sync: false }
+      - { key: FINNHUB_KEY, sync: false }
+      - { key: USE_TESTNET, value: "false" }
+      - { key: CDP_API_KEY_ID, sync: false }
+      - { key: CDP_API_KEY_SECRET, sync: false }
+      - { key: RESPONSE_SIGNING_KEY, sync: false }
+      - { key: UPSTASH_REDIS_REST_URL, sync: false }
+      - { key: UPSTASH_REDIS_REST_TOKEN, sync: false }
+      - { key: TOKEN_SECRET, generateValue: true }
+      - { key: REF_REFERRER_BONUS, value: "10" }
+      - { key: REF_REFEREE_WELCOME, value: "5" }
+      - { key: AFFILIATE_RATE, value: "0.30" }
