@@ -154,6 +154,6 @@ app.get("/", (_req, res) => {
     facilitator: TESTNET ? "x402.org" : "cdp"
   });
 });
-
+app.get("/agents.json", (req, res) => res.sendFile(process.cwd() + "/agents.json"));
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 app.listen(PORT, () => console.log(`SML x402 v2.1 BEASTMODE on :${PORT} | chains: ${ALL_CHAINS.map(c => c.id).join(", ")}`));
