@@ -11,10 +11,11 @@ import { isAddress } from "viem";
 import {
   recordPaidCall, loyaltyStatus, redeem, consumeFreeCall,
   recordAffiliate, affiliateStatus, rosterAdd, AFFILIATE_CONFIG,
-  getActiveTarget, createSubscriptionToken, validateSubscriptionToken
+  getActiveTarget, setActiveTarget, createSubscriptionToken, validateSubscriptionToken
 } from "./ledger.js";
 
 const app = express();
+app.use(express.text({ type: 'text/plain' }));
 app.use(express.json());
 
 // 24/7 resilience: a transient facilitator/network error on one request must NOT
@@ -81,22 +82,22 @@ function paidJson(res, data, info, req) {
 }
 
 // ---- DECOUPLED MATRIX PULL ROUTES (Token Required) -----------------------
-app.get("/matrix/live", async (req, res) => {
+app.get("/matrix/:feed/live", async (req, res) => {
   if (!await validateSubscriptionToken(req.headers.authorization, "standard")) {
     return res.status(402).json({ error: "payment_required", message: "Pay 250 USDC at /matrix/subscribe/standard for a 30-day token." });
   }
-  res.json(await getActiveTarget());
+  res.json(await getActiveTarget(req.params.feed));
 });
 
-app.get("/matrix/vip", async (req, res) => {
+app.get("/matrix/:feed/vip", async (req, res) => {
   if (!await validateSubscriptionToken(req.headers.authorization, "vip")) {
     return res.status(402).json({ error: "payment_required", message: "Pay 1000 USDC at /matrix/subscribe/vip for a 30-day VIP token." });
   }
-  res.json(await getActiveTarget());
+  res.json(await getActiveTarget(req.params.feed));
 });
 
-app.get("/matrix/delayed", async (req, res) => {
-  const data = await getActiveTarget();
+app.get("/matrix/:feed/delayed", async (req, res) => {
+  const data = await getActiveTarget(req.params.feed);
   if (data.status === "no_active_target") return res.json(data);
   const tsMs = (data.timestamp > 9999999999) ? data.timestamp : (data.timestamp * 1000);
   const ageMs = Date.now() - (tsMs || Date.now());
@@ -146,13 +147,100 @@ app.get("/", (_req, res) => {
   for (const ch of ALL_CHAINS) chains[ch.id] = tiersFor(ch.prefix);
   res.json({
     service: "SML Leviathan Matrix API — Institutional Equity Squeeze Pulls",
-    pulls: { live: "GET /matrix/live", vip: "GET /matrix/vip", delayed: "GET /matrix/delayed (free)" },
+    pulls: { live: "GET /matrix/:feed/live", vip: "GET /matrix/:feed/vip", delayed: "GET /matrix/:feed/delayed (free)" },
     chains, asset: "USDC",
     loyalty: { status: "GET /loyalty/:wallet", redeem: "GET /redeem/info -> POST /redeem", referral: "add ?ref=0x.." },
     affiliate: { status: "GET /affiliate/:wallet", rate: AFFILIATE_CONFIG.AFFILIATE_RATE, attribute: "add ?aff=0x.. or header X-Affiliate-ID" },
     trust: { responseSigning: "ed25519", publicKey: PUBLIC_KEY },
     facilitator: TESTNET ? "x402.org" : "cdp"
   });
+});
+
+// ---- GHOST ROUTER (TradingView Webhook Receiver) -------------------------
+const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1507577494918664355/Jq3SpGZDaIKh-qRz-9_jdTgVkUy7m1_ofLum1LrNEWak0ONs1frpNv2S6diCAhg_1chh";
+const TV_WEBHOOK_SECRET = process.env.TV_WEBHOOK_SECRET;
+
+app.post("/api/tv/:feed/webhook", async (req, res) => {
+  try {
+    if (TV_WEBHOOK_SECRET && req.headers["x-webhook-secret"] !== TV_WEBHOOK_SECRET) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    const feed = req.params.feed.toLowerCase();
+    let p = req.body;
+
+    if (typeof p === "string") {
+      try {
+        p = JSON.parse(p);
+      } catch (e) {
+        return res.status(400).json({ error: "invalid_json_payload" });
+      }
+    }
+
+    if (!p || !p.ticker || !p.action) return res.status(400).json({ error: "invalid_payload" });
+    console.log(`\n[MATRIX SNAP - ${feed.toUpperCase()}] ${p.action} triggered on ${p.ticker}`);
+    
+    // 1. Write to Upstash Vault
+    await setActiveTarget(feed, p);
+    
+    // 2. Oracle Enrichment
+    let oracleValid = false;
+    let oracleMsg = "";
+    try {
+      const abortController = new AbortController();
+      const timeout = setTimeout(() => abortController.abort(), 1500);
+      const oracleRes = await fetch(`https://lively-fascination-production-41fa.up.railway.app/api/oracle/${p.ticker}`, {
+        signal: abortController.signal
+      });
+      clearTimeout(timeout);
+      
+      if (oracleRes.ok) {
+        const data = await oracleRes.json();
+        oracleValid = data?.status === "success" 
+          && data?.oracle?.confidence > 0 
+          && data?.oracle?.directive !== "SHIELD";
+        
+        if (oracleValid) {
+          // Map confidence to A/B/C grade
+          const conf = data.oracle.confidence || 0;
+          let grade = "D GRADE";
+          if (conf >= 80) grade = "A GRADE";
+          else if (conf >= 60) grade = "B GRADE";
+          else if (conf >= 40) grade = "C GRADE";
+
+          // Try to extract price targets safely
+          const targets = data.oracle.price_targets || data.oracle.targets || data.oracle;
+          const tp = targets.tp1 || targets.tp || "N/A";
+          const stop = targets.stop || targets.stop_loss || "N/A";
+
+          oracleMsg = `\n🧠 Oracle Directive: ${data.oracle.directive} (${grade} - ${conf}% conf · ${data.oracle.regime} regime)\n🎯 Target: $${tp} | 🛑 Stop Loss: $${stop}`;
+        }
+      }
+    } catch (e) {
+      console.error("Oracle fetch err:", e.message);
+    }
+
+    // 3. Broadcast to Discord
+    const title = p.system === "SML_FTD_Hunter" ? "FTD HUNTER" : "LEVIATHAN SNAP";
+    let msg = `🚨 [**${feed.toUpperCase()}**] **${title}**: **${p.action}** on **${p.ticker}** ($${p.close || 'N/A'})`;
+    
+    if (oracleValid) {
+      msg += oracleMsg;
+    }
+    
+    msg += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏛️ Full Council brief available:\n   • AI Agents (x402): POST /api/council → 0.10 RLUSD\n   • MCP: tools/call council_verdict (symbol=${p.ticker})\n   • Humans: scriptmasterlabs.com/council\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    fetch(DISCORD_WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: msg })
+    }).catch(e => console.error("Discord err:", e.message));
+
+    res.status(200).json({ status: "secured" });
+  } catch (e) {
+    console.error("Webhook err:", e);
+    res.status(500).json({ error: "internal_error" });
+  }
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));

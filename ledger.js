@@ -209,12 +209,19 @@ export const AFFILIATE_CONFIG = { AFFILIATE_RATE };
 
 // ==== DECOUPLED MATRIX PULL (Shared Memory Vault) =========================
 // Fetches the latest Leviathan Matrix state written by the Ghost Router.
-export async function getActiveTarget() {
-  const val = await getJSON("SML:ACTIVE_TARGET");
+export async function getActiveTarget(feed = "equities") {
+  const key = `SML:ACTIVE_TARGET:${feed.toUpperCase()}`;
+  const val = await getJSON(key);
   if (!val) {
-    return { status: "no_active_target", message: "Matrix is silent." };
+    return { status: "no_active_target", message: `Matrix for ${feed} is silent.` };
   }
   return val;
+}
+
+export async function setActiveTarget(feed, payload) {
+  const key = `SML:ACTIVE_TARGET:${feed.toUpperCase()}`;
+  await setJSON(key, payload);
+  console.log(`[VAULT SECURED] ${payload.ticker || "Target"} payload pushed to ${key}. Available for API extraction.`);
 }
 
 // ==== 30-DAY SUBSCRIPTION PASSES ==========================================
