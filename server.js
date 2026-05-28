@@ -157,7 +157,7 @@ app.get("/", (_req, res) => {
 });
 
 // ---- GHOST ROUTER (TradingView Webhook Receiver) -------------------------
-const DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1507577494918664355/Jq3SpGZDaIKh-qRz-9_jdTgVkUy7m1_ofLum1LrNEWak0ONs1frpNv2S6diCAhg_1chh";
+const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK || "https://discord.com/api/webhooks/1507577494918664355/Jq3SpGZDaIKh-qRz-9_jdTgVkUy7m1_ofLum1LrNEWak0ONs1frpNv2S6diCAhg_1chh";
 const TV_WEBHOOK_SECRET = process.env.TV_WEBHOOK_SECRET;
 
 async function handleTvWebhook(feed, req, res) {
@@ -232,7 +232,14 @@ async function handleTvWebhook(feed, req, res) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: msg })
-    }).catch(e => console.error("Discord err:", e.message));
+    })
+    .then(async (r) => {
+      if (!r.ok) {
+        const txt = await r.text();
+        console.error(`Discord webhook failed (${r.status}):`, txt);
+      }
+    })
+    .catch(e => console.error("Discord network err:", e.message));
 
     res.status(200).json({ status: "secured" });
   } catch (e) {
