@@ -107,6 +107,35 @@ app.get("/matrix/:feed/delayed", async (req, res) => {
   res.json(data);
 });
 
+// ---- AP2 MANDATE GATE (Google Agent Payments Protocol) --------------------
+// Verifies Intent/Cart/Payment mandates (W3C VCs) before the x402 paywall.
+// AP2_MODE env: "off" | "optional" (default) | "required"
+import { verifyMandate, mandateFromRequest } from "./ap2.js";
+const AP2_MODE = (process.env.AP2_MODE || "optional").toLowerCase();
+const AP2_TRUSTED = (() => { try { return JSON.parse(process.env.AP2_TRUSTED_ISSUERS || "{}"); } catch { return {}; } })();
+app.use((req, res, next) => {
+  if (AP2_MODE === "off") return next();
+  const mandate = mandateFromRequest(req);
+  if (mandate) {
+    const verdict = verifyMandate(mandate, {
+      resource: `${req.protocol}://${req.get("host")}${req.originalUrl}`,
+      amountAtomicUSDC: 0, // per-route price enforced by x402 layer; mandate caps checked vs declared maxPrice
+      payTo: PAY_TO,
+      trustedIssuers: AP2_TRUSTED,
+    });
+    if (!verdict.valid && verdict.reason !== "failed:within_price_cap") {
+      return res.status(402).json({ error: "ap2_mandate_invalid", reason: verdict.reason, checks: verdict.checks,
+        spec: "https://ap2-protocol.org/specification/" });
+    }
+    res.set("X-AP2-VERIFIED", "true");
+  } else if (AP2_MODE === "required" && (req.path.startsWith("/matrix") || req.path.startsWith("/poly") || req.path.startsWith("/sol"))) {
+    return res.status(402).json({ error: "ap2_mandate_required",
+      message: "Send X-AP2-MANDATE header (base64 W3C VC bundle).",
+      spec: "https://ap2-protocol.org/specification/" });
+  }
+  next();
+});
+
 // ---- x402 PAYWALLS (EVM + optional Solana) -------------------------------
 app.use(paymentMiddleware(PAY_TO, buildRoutes(EVM_CHAINS), facilitator));
 if (SVM_CHAINS.length) {

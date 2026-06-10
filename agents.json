@@ -66,15 +66,60 @@
     "network": "base",
     "payment": "USDC via x402",
     "endpoints": [
-      { "path": "/matrix/delayed", "price": "free", "desc": "Tier 0 (Shadow): 65-minute artificially delayed payload for backtesting" },
-      { "path": "/matrix/subscribe/standard", "price": "$250", "desc": "Tier 1 (Standard): Checkout route. Buys a 30-Day Real-Time Token" },
-      { "path": "/matrix/live", "price": "free", "desc": "Real-time pull. Requires 30-Day Standard Token in headers" },
-      { "path": "/matrix/subscribe/vip", "price": "$1000", "desc": "Tier 5 (VIP): Checkout route. Buys a 30-Day VIP Zero-Hop Token" },
-      { "path": "/matrix/vip", "price": "free", "desc": "Zero-hop pull. Requires 30-Day VIP Token in headers" }
+      {
+        "path": "/matrix/delayed",
+        "price": "free",
+        "desc": "Tier 0 (Shadow): 65-minute artificially delayed payload for backtesting"
+      },
+      {
+        "path": "/matrix/subscribe/standard",
+        "price": "$250",
+        "desc": "Tier 1 (Standard): Checkout route. Buys a 30-Day Real-Time Token"
+      },
+      {
+        "path": "/matrix/live",
+        "price": "free",
+        "desc": "Real-time pull. Requires 30-Day Standard Token in headers"
+      },
+      {
+        "path": "/matrix/subscribe/vip",
+        "price": "$1000",
+        "desc": "Tier 5 (VIP): Checkout route. Buys a 30-Day VIP Zero-Hop Token"
+      },
+      {
+        "path": "/matrix/vip",
+        "price": "free",
+        "desc": "Zero-hop pull. Requires 30-Day VIP Token in headers"
+      }
     ],
     "loyalty": "tiered free-call credits + referral",
-    "affiliate": { "rate": 0.15, "param": "?aff=0x..", "settlement": "USDC on Base" },
+    "affiliate": {
+      "rate": 0.15,
+      "param": "?aff=0x..",
+      "settlement": "USDC on Base"
+    },
     "response_signing": "ed25519",
     "wallet": "0x4e14B249D9A4c9c9352D780eCEB508A8eB7a7700"
+  },
+  "ap2": {
+    "supported": true,
+    "mode": "optional",
+    "mandate_header": "X-AP2-MANDATE",
+    "spec": "https://ap2-protocol.org/specification/",
+    "settlement_rail": "x402",
+    "note": "Leviathan Matrix verifies AP2 mandates (W3C VCs) before honoring agent payments. Settlement via x402 USDC on Base/Polygon/Solana."
+  },
+  "conversational_attributes": {
+    "offering_type": "signal_subscription",
+    "pricing_model": "subscription_via_x402",
+    "currency": "USDC",
+    "refundable": false,
+    "latency": "real_time",
+    "categories": [
+      "institutional_signals",
+      "equity_squeeze",
+      "ema_matrix",
+      "trading_intelligence"
+    ]
   }
 }
