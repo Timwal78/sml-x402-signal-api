@@ -1,0 +1,15 @@
+# SML x402 Signal API
+> Pay-per-call US equities trading signals for AI agents.
+
+## Endpoints
+- GET /signal/:ticker/teaser - FREE bias only
+- GET /signal/:ticker - $0.01 bias + momentum score
+- GET /regime/:ticker - $0.05 full multi-factor regime
+- GET /squeeze/:ticker - $0.25 short-squeeze pressure engine
+
+## Payment: Base USDC via x402 protocol
+## Auth: X-Payment-Token header
+## Signed: Ed25519 response signing
+## Affiliate: 30% USDC revenue-share (?aff=0x...)
+
+## Built by ScriptMasterLabs (SDVOSB) - ScriptMasterLabs@gmail.com
