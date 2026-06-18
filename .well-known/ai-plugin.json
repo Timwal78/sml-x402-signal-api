@@ -1,0 +1,17 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "SML x402 Signal API",
+  "name_for_model": "sml_signal_api",
+  "description_for_human": "Pay-per-call US equities trading signals. $0.01-$0.25 per call via Base USDC x402.",
+  "description_for_model": "Provides US equities trading signals including bias, momentum scores, regime analysis, and short-squeeze pressure engine. Pay per call via x402 on Base.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://github.com/Timwal78/sml-x402-signal-api"
+  },
+  "logo_url": "https://www.scriptmasterlabs.com/favicon.ico",
+  "contact_email": "ScriptMasterLabs@gmail.com",
+  "legal_info_url": "https://www.scriptmasterlabs.com"
+}
