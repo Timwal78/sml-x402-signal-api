@@ -4,6 +4,8 @@
 // Ed25519-signed responses. Loyalty credits + referrals. Affiliate USDC revenue-share.
 
 import express from "express";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 import { paymentMiddleware } from "x402-express";
 import { facilitator as cdpFacilitator } from "@coinbase/x402";
 import { signPayload, PUBLIC_KEY } from "./sign.js";
@@ -14,9 +16,47 @@ import {
   getActiveTarget, setActiveTarget, createSubscriptionToken, validateSubscriptionToken
 } from "./ledger.js";
 
+// ---- STARTUP: require critical env vars before doing anything ---------------
+const REQUIRED_ENV = ["PAY_TO_WALLET"];
+for (const v of REQUIRED_ENV) {
+  if (!process.env[v]) {
+    console.error(`FATAL: Missing required env var: ${v}`);
+    process.exit(1);
+  }
+}
+
 const app = express();
-app.use(express.text({ type: 'text/plain' }));
+
+// ---- SECURITY HEADERS (helmet) ---------------------------------------------
+app.disable("x-powered-by");
+app.use(helmet({
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  contentSecurityPolicy: false, // API only — no HTML served
+}));
+
+// ---- BODY PARSING ----------------------------------------------------------
+app.use(express.text({ type: "text/plain" }));
 app.use(express.json());
+
+// ---- RATE LIMITING ---------------------------------------------------------
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,   // 15 minutes
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_requests", message: "Rate limit exceeded. Try again later." },
+});
+
+const webhookLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "too_many_requests", message: "Webhook rate limit exceeded." },
+});
+
+// Apply general rate limit to all routes
+app.use(generalLimiter);
 
 // 24/7 resilience: a transient facilitator/network error on one request must NOT
 // take down the whole service. Log and stay alive.
@@ -28,8 +68,21 @@ const SOLANA_PAY_TO = process.env.SOLANA_PAY_TO;     // optional Solana address
 const PORT = process.env.PORT || 4021;
 const TESTNET = process.env.USE_TESTNET === "true";
 const facilitator = TESTNET ? { url: "https://www.x402.org/facilitator" } : cdpFacilitator;
-if (!PAY_TO) { console.error("FATAL: PAY_TO_WALLET not set."); process.exit(1); }
-if (!isAddress(PAY_TO)) { console.error(`FATAL: PAY_TO_WALLET is not a valid address: ${PAY_TO}`); process.exit(1); }
+if (!isAddress(PAY_TO)) { console.error(`FATAL: PAY_TO_WALLET is not a valid EVM address: ${PAY_TO}`); process.exit(1); }
+
+// ---- VALID FEED NAMES (allowlist) ------------------------------------------
+const VALID_FEEDS = new Set(["equities", "meme", "etf", "crypto", "ftd"]);
+function isValidFeed(feed) {
+  return typeof feed === "string" && VALID_FEEDS.has(feed.toLowerCase());
+}
+
+// ---- WALLET ADDRESS VALIDATORS ---------------------------------------------
+const EVM_ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
+const SOLANA_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
+function isValidEvmAddress(addr) {
+  return typeof addr === "string" && EVM_ADDR_RE.test(addr);
+}
 
 // ---- TIERS ---------------------------------------------------------------
 const meta = (chainId, desc, props) => ({
@@ -67,7 +120,10 @@ function buildRoutes(chains) {
 // ---- helpers -------------------------------------------------------------
 const payerOf = (req) => { const p = req.x402Payment || {}; return p.payer || p.from || p.payload?.from || p.account || null; };
 const txOf = (req) => { const p = req.x402Payment || {}; return p.transactionHash || p.txHash || null; };
-const fail = (res, e) => res.status(502).json({ error: "signal_unavailable", detail: String(e.message || e) });
+const fail = (res, e) => {
+  console.error("Route error:", e?.message || e);
+  res.status(502).json({ error: "signal_unavailable" });
+};
 
 async function settle(req, priceN, chain) {
   const payer = payerOf(req), ref = req.query.ref;
@@ -83,28 +139,52 @@ function paidJson(res, data, info, req) {
 
 // ---- DECOUPLED MATRIX PULL ROUTES (Token Required) -----------------------
 app.get("/matrix/:feed/live", async (req, res) => {
-  if (!await validateSubscriptionToken(req.headers.authorization, "standard")) {
-    return res.status(402).json({ error: "payment_required", message: "Pay 250 USDC at /matrix/subscribe/standard for a 30-day token." });
+  if (!isValidFeed(req.params.feed)) {
+    return res.status(400).json({ error: "invalid_feed", message: "Unknown feed name." });
   }
-  res.json(await getActiveTarget(req.params.feed));
+  try {
+    if (!await validateSubscriptionToken(req.headers.authorization, "standard")) {
+      return res.status(402).json({ error: "payment_required", message: "Pay 250 USDC at /matrix/subscribe/standard for a 30-day token." });
+    }
+    res.json(await getActiveTarget(req.params.feed));
+  } catch (e) {
+    console.error("matrix/live error:", e?.message || e);
+    res.status(500).json({ error: "internal_error" });
+  }
 });
 
 app.get("/matrix/:feed/vip", async (req, res) => {
-  if (!await validateSubscriptionToken(req.headers.authorization, "vip")) {
-    return res.status(402).json({ error: "payment_required", message: "Pay 1000 USDC at /matrix/subscribe/vip for a 30-day VIP token." });
+  if (!isValidFeed(req.params.feed)) {
+    return res.status(400).json({ error: "invalid_feed", message: "Unknown feed name." });
   }
-  res.json(await getActiveTarget(req.params.feed));
+  try {
+    if (!await validateSubscriptionToken(req.headers.authorization, "vip")) {
+      return res.status(402).json({ error: "payment_required", message: "Pay 1000 USDC at /matrix/subscribe/vip for a 30-day VIP token." });
+    }
+    res.json(await getActiveTarget(req.params.feed));
+  } catch (e) {
+    console.error("matrix/vip error:", e?.message || e);
+    res.status(500).json({ error: "internal_error" });
+  }
 });
 
 app.get("/matrix/:feed/delayed", async (req, res) => {
-  const data = await getActiveTarget(req.params.feed);
-  if (data.status === "no_active_target") return res.json(data);
-  const tsMs = (data.timestamp > 9999999999) ? data.timestamp : (data.timestamp * 1000);
-  const ageMs = Date.now() - (tsMs || Date.now());
-  if (ageMs < 65 * 60 * 1000) {
-    return res.status(403).json({ error: "too_early", message: `Delayed payload available in ${Math.ceil((65 * 60 * 1000 - ageMs) / 60000)} minutes.` });
+  if (!isValidFeed(req.params.feed)) {
+    return res.status(400).json({ error: "invalid_feed", message: "Unknown feed name." });
   }
-  res.json(data);
+  try {
+    const data = await getActiveTarget(req.params.feed);
+    if (data.status === "no_active_target") return res.json(data);
+    const tsMs = (data.timestamp > 9999999999) ? data.timestamp : (data.timestamp * 1000);
+    const ageMs = Date.now() - (tsMs || Date.now());
+    if (ageMs < 65 * 60 * 1000) {
+      return res.status(403).json({ error: "too_early", message: `Delayed payload available in ${Math.ceil((65 * 60 * 1000 - ageMs) / 60000)} minutes.` });
+    }
+    res.json(data);
+  } catch (e) {
+    console.error("matrix/delayed error:", e?.message || e);
+    res.status(500).json({ error: "internal_error" });
+  }
 });
 
 // ---- AP2 MANDATE GATE (Google Agent Payments Protocol) --------------------
@@ -159,13 +239,63 @@ for (const ch of ALL_CHAINS) for (const t of TIERS) {
 }
 
 // ---- LOYALTY + AFFILIATE (free reads) ------------------------------------
-app.get("/loyalty/:wallet", async (req, res) => { try { res.json(await loyaltyStatus(req.params.wallet)); } catch (e) { res.status(500).json({ error: String(e) }); } });
-app.get("/affiliate/:wallet", async (req, res) => { try { res.json({ ...await affiliateStatus(req.params.wallet), rate: AFFILIATE_CONFIG.AFFILIATE_RATE, link: `?aff=${req.params.wallet.toLowerCase()}` }); } catch (e) { res.status(500).json({ error: String(e) }); } });
-app.get("/redeem/info", (req, res) => {
-  const ts = Math.floor(Date.now() / 1000); const wallet = (req.query.wallet || "0xYourWallet").toLowerCase();
-  res.json({ step1_sign_this_message: `SML-REDEEM:${wallet}:${ts}`, step2_post_to: "POST /redeem", body: { wallet, ts, signature: "0x<sig>", calls: 5 }, note: "Then GET /signal with header Authorization: Bearer <token>" });
+app.get("/loyalty/:wallet", async (req, res) => {
+  const wallet = req.params.wallet;
+  if (!isValidEvmAddress(wallet)) {
+    return res.status(400).json({ error: "invalid_wallet", message: "Must be a valid EVM address (0x...)." });
+  }
+  try {
+    res.json(await loyaltyStatus(wallet));
+  } catch (e) {
+    console.error("loyalty error:", e?.message || e);
+    res.status(500).json({ error: "internal_error" });
+  }
 });
-app.post("/redeem", async (req, res) => { try { res.json(await redeem(req.body || {})); } catch (e) { res.status(400).json({ error: String(e.message || e) }); } });
+
+app.get("/affiliate/:wallet", async (req, res) => {
+  const wallet = req.params.wallet;
+  if (!isValidEvmAddress(wallet)) {
+    return res.status(400).json({ error: "invalid_wallet", message: "Must be a valid EVM address (0x...)." });
+  }
+  try {
+    res.json({ ...await affiliateStatus(wallet), rate: AFFILIATE_CONFIG.AFFILIATE_RATE, link: `?aff=${wallet.toLowerCase()}` });
+  } catch (e) {
+    console.error("affiliate error:", e?.message || e);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
+
+app.get("/redeem/info", (req, res) => {
+  const ts = Math.floor(Date.now() / 1000);
+  const rawWallet = req.query.wallet || "0xYourWallet";
+  const wallet = isValidEvmAddress(rawWallet) ? rawWallet.toLowerCase() : "0xYourWallet";
+  res.json({
+    step1_sign_this_message: `SML-REDEEM:${wallet}:${ts}`,
+    step2_post_to: "POST /redeem",
+    body: { wallet, ts, signature: "0x<sig>", calls: 5 },
+    note: "Then GET /signal with header Authorization: Bearer <token>"
+  });
+});
+
+app.post("/redeem", async (req, res) => {
+  try {
+    const body = req.body;
+    if (!body || typeof body !== "object") {
+      return res.status(400).json({ error: "invalid_request", message: "JSON body required." });
+    }
+    const { wallet, ts, signature, calls } = body;
+    if (typeof wallet !== "string" || typeof ts !== "number" && typeof ts !== "string" || typeof signature !== "string") {
+      return res.status(400).json({ error: "invalid_request", message: "wallet, ts, and signature are required." });
+    }
+    if (!isValidEvmAddress(wallet)) {
+      return res.status(400).json({ error: "invalid_wallet", message: "wallet must be a valid EVM address." });
+    }
+    res.json(await redeem({ wallet, ts, signature, calls }));
+  } catch (e) {
+    console.error("redeem error:", e?.message || e);
+    res.status(400).json({ error: e.message || "redeem_failed" });
+  }
+});
 
 // ---- SERVICE INDEX (free) ------------------------------------------------
 app.get("/", (_req, res) => {
@@ -186,11 +316,16 @@ app.get("/", (_req, res) => {
 });
 
 // ---- GHOST ROUTER (TradingView Webhook Receiver) -------------------------
-const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK || "https://discord.com/api/webhooks/1507577494918664355/Jq3SpGZDaIKh-qRz-9_jdTgVkUy7m1_ofLum1LrNEWak0ONs1frpNv2S6diCAhg_1chh";
+const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const TV_WEBHOOK_SECRET = process.env.TV_WEBHOOK_SECRET;
 
 async function handleTvWebhook(feed, req, res) {
   try {
+    // Validate feed param
+    if (!isValidFeed(feed)) {
+      return res.status(400).json({ error: "invalid_feed" });
+    }
+
     if (TV_WEBHOOK_SECRET && req.headers["x-webhook-secret"] !== TV_WEBHOOK_SECRET) {
       return res.status(401).json({ error: "unauthorized" });
     }
@@ -204,29 +339,36 @@ async function handleTvWebhook(feed, req, res) {
       }
     }
 
-    if (!p || !p.ticker || !p.action) return res.status(400).json({ error: "invalid_payload" });
-    console.log(`\n[MATRIX SNAP - ${feed.toUpperCase()}] ${p.action} triggered on ${p.ticker}`);
-    
-    // 1. Write to Upstash Vault
-    await setActiveTarget(feed, p);
-    
+    if (!p || typeof p !== "object") return res.status(400).json({ error: "invalid_payload" });
+    if (typeof p.ticker !== "string" || !p.ticker) return res.status(400).json({ error: "invalid_payload", message: "ticker required" });
+    if (typeof p.action !== "string" || !p.action) return res.status(400).json({ error: "invalid_payload", message: "action required" });
+
+    // Sanitize ticker: only allow alphanumeric + common symbols
+    const safeTicker = p.ticker.replace(/[^A-Z0-9.^$-]/gi, "").slice(0, 20);
+    if (!safeTicker) return res.status(400).json({ error: "invalid_payload", message: "invalid ticker" });
+
+    console.log(`\n[MATRIX SNAP - ${feed.toUpperCase()}] ${p.action} triggered on ${safeTicker}`);
+
+    // 1. Write to Upstash Vault (use sanitized ticker)
+    await setActiveTarget(feed, { ...p, ticker: safeTicker });
+
     // 2. Oracle Enrichment
     let oracleValid = false;
     let oracleMsg = "";
     try {
       const abortController = new AbortController();
       const timeout = setTimeout(() => abortController.abort(), 1500);
-      const oracleRes = await fetch(`https://lively-fascination-production-41fa.up.railway.app/api/oracle/${p.ticker}`, {
+      const oracleRes = await fetch(`https://lively-fascination-production-41fa.up.railway.app/api/oracle/${encodeURIComponent(safeTicker)}`, {
         signal: abortController.signal
       });
       clearTimeout(timeout);
-      
+
       if (oracleRes.ok) {
         const data = await oracleRes.json();
-        oracleValid = data?.status === "success" 
-          && data?.oracle?.confidence > 0 
+        oracleValid = data?.status === "success"
+          && data?.oracle?.confidence > 0
           && data?.oracle?.directive !== "SHIELD";
-        
+
         if (oracleValid) {
           // Map confidence to A/B/C grade
           const conf = data.oracle.confidence || 0;
@@ -248,37 +390,39 @@ async function handleTvWebhook(feed, req, res) {
     }
 
     // 3. Broadcast to Discord
-    const title = p.system === "SML_FTD_Hunter" ? "FTD HUNTER" : "LEVIATHAN SNAP";
-    let msg = `🚨 [**${feed.toUpperCase()}**] **${title}**: **${p.action}** on **${p.ticker}** ($${p.close || 'N/A'})`;
-    
-    if (oracleValid) {
-      msg += oracleMsg;
-    }
-    
-    msg += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏛️ Full Council brief available:\n   • AI Agents (x402): POST /api/council → 0.10 RLUSD\n   • MCP: tools/call council_verdict (symbol=${p.ticker})\n   • Humans: scriptmasterlabs.com/council\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+    if (DISCORD_WEBHOOK) {
+      const title = p.system === "SML_FTD_Hunter" ? "FTD HUNTER" : "LEVIATHAN SNAP";
+      let msg = `🚨 [**${feed.toUpperCase()}**] **${title}**: **${p.action}** on **${safeTicker}** ($${p.close || "N/A"})`;
 
-    fetch(DISCORD_WEBHOOK, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: msg })
-    })
-    .then(async (r) => {
-      if (!r.ok) {
-        const txt = await r.text();
-        console.error(`Discord webhook failed (${r.status}):`, txt);
+      if (oracleValid) {
+        msg += oracleMsg;
       }
-    })
-    .catch(e => console.error("Discord network err:", e.message));
+
+      msg += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏛️ Full Council brief available:\n   • AI Agents (x402): POST /api/council → 0.10 RLUSD\n   • MCP: tools/call council_verdict (symbol=${safeTicker})\n   • Humans: scriptmasterlabs.com/council\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+      fetch(DISCORD_WEBHOOK, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: msg })
+      })
+      .then(async (r) => {
+        if (!r.ok) {
+          const txt = await r.text();
+          console.error(`Discord webhook failed (${r.status}):`, txt);
+        }
+      })
+      .catch(e => console.error("Discord network err:", e.message));
+    }
 
     res.status(200).json({ status: "secured" });
   } catch (e) {
-    console.error("Webhook err:", e);
+    console.error("Webhook err:", e?.message || e);
     res.status(500).json({ error: "internal_error" });
   }
 }
 
-app.post("/webhook/tv", (req, res) => handleTvWebhook("equities", req, res));
-app.post("/api/tv/:feed/webhook", (req, res) => handleTvWebhook(req.params.feed, req, res));
+app.post("/webhook/tv", webhookLimiter, (req, res) => handleTvWebhook("equities", req, res));
+app.post("/api/tv/:feed/webhook", webhookLimiter, (req, res) => handleTvWebhook(req.params.feed, req, res));
 
 app.get("/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 app.listen(PORT, () => console.log(`SML x402 v2.1 BEASTMODE on :${PORT} | chains: ${ALL_CHAINS.map(c => c.id).join(", ")}`));
