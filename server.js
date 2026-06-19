@@ -186,7 +186,7 @@ app.get("/", (_req, res) => {
 });
 
 // ---- GHOST ROUTER (TradingView Webhook Receiver) -------------------------
-const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK || "https://discord.com/api/webhooks/1507577494918664355/Jq3SpGZDaIKh-qRz-9_jdTgVkUy7m1_ofLum1LrNEWak0ONs1frpNv2S6diCAhg_1chh";
+const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const TV_WEBHOOK_SECRET = process.env.TV_WEBHOOK_SECRET;
 
 async function handleTvWebhook(feed, req, res) {
