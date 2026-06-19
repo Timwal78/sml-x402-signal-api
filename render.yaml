@@ -23,3 +23,7 @@ services:
       - { key: REF_REFERRER_BONUS, value: "10" }
       - { key: REF_REFEREE_WELCOME, value: "5" }
       - { key: AFFILIATE_RATE, value: "0.30" }
+      - { key: TV_WEBHOOK_SECRET, sync: false }
+      - { key: DISCORD_WEBHOOK, sync: false }
+      - { key: AP2_MODE, value: "optional" }
+      - { key: AP2_TRUSTED_ISSUERS, value: "{}" }

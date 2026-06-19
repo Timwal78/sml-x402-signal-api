@@ -4,15 +4,21 @@
   "description": "ScriptMasterLabs x402 signal API (BEASTMODE): equities + squeeze tiers, ed25519-signed responses, loyalty credits + referrals, affiliate USDC revenue-share. USDC on Base.",
   "type": "module",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
-    "express": "^4.21.2",
-    "x402-express": "^1.2.0",
-    "@coinbase/x402": "^2.1.0",
-    "viem": "^2.50.0"
+    "@coinbase/x402": "2.1.0",
+    "express": "4.21.2",
+    "express-rate-limit": "8.5.2",
+    "helmet": "8.2.0",
+    "viem": "2.50.0",
+    "x402-express": "1.2.0"
   },
   "devDependencies": {
-    "x402-fetch": "^1.2.0"
+    "x402-fetch": "1.2.0"
   }
 }

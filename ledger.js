@@ -25,7 +25,7 @@ async function cmd(...args) {
     headers: { Authorization: `Bearer ${U_TOK}`, "Content-Type": "application/json" },
     body: JSON.stringify(args)
   });
-  if (!r.ok) throw new Error(`upstash ${r.status}`);
+  if (!r.ok) throw new Error(`storage error: ${r.status}`);
   const { result } = await r.json();
   return result;
 }
@@ -114,6 +114,19 @@ function sign(payloadB64) {
   return crypto.createHmac("sha256", TOKEN_SECRET).update(payloadB64).digest("base64url");
 }
 
+// Constant-time string comparison to prevent timing attacks
+function safeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Still run timingSafeEqual on same-length buffers to avoid length-based timing leak
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 export async function redeem({ wallet, ts, signature, calls }) {
   const n = Math.max(1, Math.floor(Number(calls) || 1));
   const now = Math.floor(Date.now() / 1000);
@@ -147,7 +160,7 @@ export async function consumeFreeCall(authHeader) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
   const tok = authHeader.slice(7);
   const [body, sig] = tok.split(".");
-  if (!body || !sig || sign(body) !== sig) return false;
+  if (!body || !sig || !safeEqual(sign(body), sig)) return false;
   let parsed;
   try { parsed = JSON.parse(Buffer.from(body, "base64url").toString()); } catch { return false; }
   if (Date.now() > parsed.exp) return false;
@@ -237,7 +250,7 @@ export async function validateSubscriptionToken(authHeader, requiredTier) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
   const tok = authHeader.slice(7);
   const [body, sig] = tok.split(".");
-  if (!body || !sig || sign(body) !== sig) return false;
+  if (!body || !sig || !safeEqual(sign(body), sig)) return false;
   let parsed;
   try { parsed = JSON.parse(Buffer.from(body, "base64url").toString()); } catch { return false; }
   if (Date.now() > parsed.exp) return false;
