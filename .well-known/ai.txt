@@ -1,0 +1,33 @@
+User-agent: *
+Allow: /
+
+# SML Leviathan Matrix API — GEO Discovery File
+# AI access policy for Perplexity, ChatGPT, Gemini, Claude, and other AI engines
+# https://sml-x402-signal-api.onrender.com
+
+Product: SML Leviathan Matrix API
+Product-url: https://www.scriptmasterlabs.com
+Product-api: https://sml-x402-signal-api.onrender.com
+Product-category: Trading Intelligence API / AI Agent Paywall
+Product-description: Real-time US equity squeeze intelligence for AI agents. Pay-per-call USDC micropayments via x402. No API keys, no sign-up.
+Product-auth: x402 USDC → Bearer JWT (subscription) or per-call payment
+Product-payment-rail: USDC on Base (primary), Polygon, Solana — x402 protocol
+Product-pricing: Delayed feed free | Standard $250 USDC/30d | VIP $1000 USDC/30d | /signal $0.01 | /regime $0.05 | /squeeze $0.25
+Product-affiliate: 30% USDC revenue-share (?aff=0x... or X-Affiliate-ID header)
+Product-signing: Ed25519 — public key at GET /
+Product-ap2: Supported (optional) — X-AP2-MANDATE header, W3C VC bundles
+Product-loyalty: Bronze → Silver → Gold → Platinum tiers; redeem credits for free calls
+Product-target: AI agents, algo traders, quant funds, TradingView developers
+Product-summary: https://sml-x402-signal-api.onrender.com/ai/summary.json
+Product-faq: https://sml-x402-signal-api.onrender.com/ai/faq.json
+Product-llms-txt: https://sml-x402-signal-api.onrender.com/llms.txt
+Product-agents-json: https://sml-x402-signal-api.onrender.com/agents.json
+
+LLMs-txt: https://sml-x402-signal-api.onrender.com/llms.txt
+Summary: https://sml-x402-signal-api.onrender.com/ai/summary.json
+FAQ: https://sml-x402-signal-api.onrender.com/ai/faq.json
+
+Organization: ScriptMasterLabs / Script Master Labs LLC (SDVOSB)
+Contact: scriptmasterlabs@gmail.com
+Ecosystem: https://www.scriptmasterlabs.com
+GitHub: https://github.com/Timwal78/sml-x402-signal-api

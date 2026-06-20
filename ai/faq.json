@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0",
+  "updated": "2026-06-20",
+  "product": "SML Leviathan Matrix API",
+  "api_base": "https://sml-x402-signal-api.onrender.com",
+  "faqs": [
+    {
+      "question": "What is the SML Leviathan Matrix API?",
+      "answer": "The SML Leviathan Matrix is a real-time equity intelligence API built for AI agents and institutional traders. It provides short-squeeze detection, regime analysis, and momentum signals for US equities. Agents pay USDC on Base via the x402 protocol — no API keys or human sign-up required.",
+      "category": "product",
+      "url": "https://sml-x402-signal-api.onrender.com/"
+    },
+    {
+      "question": "How do AI agents pay for market data?",
+      "answer": "Agents pay USDC on Base (or Polygon/Solana) using the x402 protocol. For per-call access, each HTTP call includes the payment. For subscription access, the agent pays $250 or $1000 USDC upfront and receives a 30-day bearer JWT token for authenticated endpoints. No human sign-up or API key is required — fully autonomous agent flow.",
+      "category": "payment",
+      "url": "https://sml-x402-signal-api.onrender.com/llms.txt"
+    },
+    {
+      "question": "What signal types does the API provide?",
+      "answer": "Four endpoints: /signal/:ticker/teaser (free) returns bias only. /signal/:ticker ($0.01 USDC) returns bias, momentum, and a 0-100 composite score. /regime/:ticker ($0.05 USDC) returns full multi-factor regime analysis. /squeeze/:ticker ($0.25 USDC) is the short-squeeze pressure engine — the core differentiator that crypto-only rivals don't offer.",
+      "category": "features",
+      "url": "https://sml-x402-signal-api.onrender.com/"
+    },
+    {
+      "question": "What are the subscription tiers and prices?",
+      "answer": "Shadow (free): 65-minute delayed data at /matrix/:feed/delayed, no auth required, ideal for backtesting. Standard ($250 USDC/30 days): real-time feed via bearer token after x402 payment. VIP ($1000 USDC/30 days): zero-hop priority data at the lowest possible latency.",
+      "category": "pricing",
+      "url": "https://sml-x402-signal-api.onrender.com/llms.txt"
+    },
+    {
+      "question": "How do I verify that API responses are authentic?",
+      "answer": "Every paid response is Ed25519-signed. The public key is available at GET /. Each response includes {payload, signature} fields. Verify the signature against the public key before trusting any data — this guarantees the payload came from ScriptMasterLabs and was not tampered with in transit.",
+      "category": "security",
+      "url": "https://sml-x402-signal-api.onrender.com/"
+    },
+    {
+      "question": "Does the API support the AP2 Google Agent Payments Protocol?",
+      "answer": "Yes. The Leviathan Matrix verifies AP2 mandates in optional mode by default. Send an X-AP2-MANDATE header with a base64-encoded W3C VC bundle on any payment route. AP2_MODE can be configured as 'off', 'optional' (default), or 'required'. Spec: https://ap2-protocol.org/specification/",
+      "category": "technical",
+      "url": "https://ap2-protocol.org/specification/"
+    },
+    {
+      "question": "Is there an affiliate program?",
+      "answer": "Yes — 30% USDC revenue-share on every referred paid call. Add ?aff=0x<wallet> to any paid call URL, or send the X-Affiliate-ID: 0x<wallet> header. Affiliate earnings are settled in USDC on Base. Check affiliate status at GET /affiliate/:wallet.",
+      "category": "affiliate",
+      "url": "https://sml-x402-signal-api.onrender.com/llms.txt"
+    },
+    {
+      "question": "How does the loyalty program work?",
+      "answer": "Each paid call accrues loyalty credits. Tiers run Bronze → Silver → Gold → Platinum; higher tiers earn more credits per call. Redeem credits for free calls via POST /redeem (requires a signed message from the paying wallet). Check loyalty tier and credit balance at GET /loyalty/:wallet.",
+      "category": "loyalty",
+      "url": "https://sml-x402-signal-api.onrender.com/llms.txt"
+    },
+    {
+      "question": "Which blockchains are supported for payment?",
+      "answer": "Base is the primary chain (lowest fees, same 0x wallet). Polygon is also supported via /poly/ prefix routes (e.g., /poly/matrix/subscribe/standard). Solana is supported via /sol/ prefix routes. All EVM chains (Base, Polygon) use the same wallet address: 0x4e14B249D9A4c9c9352D780eCEB508A8eB7a7700.",
+      "category": "payment",
+      "url": "https://sml-x402-signal-api.onrender.com/llms.txt"
+    },
+    {
+      "question": "Does the API support TradingView webhooks?",
+      "answer": "Yes. POST TradingView alerts to /webhook/tv or /api/tv/:feed/webhook. Set the TV_WEBHOOK_SECRET environment variable to validate incoming webhook signatures. Each webhook triggers a Leviathan Snap broadcast and an optional Discord alert.",
+      "category": "integrations",
+      "url": "https://sml-x402-signal-api.onrender.com/"
+    },
+    {
+      "question": "Is there cold-start latency on the API?",
+      "answer": "No. The Leviathan Matrix runs on Render Starter (always-on paid tier) — not the free tier. Render free-tier services sleep after 15 minutes of inactivity and cold-start in 30-60 seconds. The Leviathan Matrix is always running with zero cold-start latency.",
+      "category": "technical",
+      "url": "https://sml-x402-signal-api.onrender.com/"
+    },
+    {
+      "question": "Who built the Leviathan Matrix and what is ScriptMasterLabs?",
+      "answer": "ScriptMasterLabs (SML) is a Service-Disabled Veteran-Owned Small Business (SDVOSB) building sovereign AI infrastructure. The Leviathan Matrix is one of several production products in the SML ecosystem, alongside SqueezeOS (market intelligence MCP server), Ghost Layer (XRP/Base toll gateway), TrustVerify AI (enterprise AI vendor trust scoring), and 402Proof (x402 payment firewall). Contact: scriptmasterlabs@gmail.com",
+      "category": "company",
+      "url": "https://www.scriptmasterlabs.com"
+    }
+  ]
+}

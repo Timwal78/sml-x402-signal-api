@@ -1,0 +1,142 @@
+{
+  "schema_version": "1.0",
+  "updated": "2026-06-20",
+  "organization": {
+    "name": "ScriptMasterLabs",
+    "legal_name": "Script Master Labs LLC",
+    "designation": "SDVOSB",
+    "url": "https://www.scriptmasterlabs.com",
+    "contact": "scriptmasterlabs@gmail.com"
+  },
+  "product": {
+    "name": "SML Leviathan Matrix API",
+    "codename": "BEASTMODE",
+    "tagline": "Institutional equity squeeze intelligence — pay-per-call for AI agents",
+    "category": "Trading Intelligence API",
+    "url": "https://www.scriptmasterlabs.com",
+    "api_base": "https://sml-x402-signal-api.onrender.com",
+    "status": "production",
+    "description": "The SML Leviathan Matrix is a real-time market intelligence API purpose-built for AI agents and institutional traders. Agents pay USDC on Base via the x402 protocol — no API keys, no human sign-up required. Specializes in US equity short-squeeze detection, multi-factor regime analysis, and momentum signals. Ed25519-signed responses guarantee data integrity on every payload.",
+    "differentiators": [
+      "Short-squeeze pressure engine — the lane crypto-only rivals leave empty",
+      "x402 USDC micropayments — agents pay per call autonomously",
+      "Ed25519-signed responses — cryptographic integrity on every payload",
+      "AP2 protocol support — W3C VC mandate verification",
+      "30% affiliate revenue-share paid in USDC on Base",
+      "Loyalty credits — Bronze → Silver → Gold → Platinum tiers",
+      "Multi-chain: Base (primary), Polygon, Solana",
+      "Always-on Render Starter — zero cold starts"
+    ],
+    "per_call_endpoints": [
+      {
+        "name": "Signal Teaser",
+        "description": "Bias-only sample — no payment required",
+        "path": "/signal/:ticker/teaser",
+        "price": "free"
+      },
+      {
+        "name": "Signal",
+        "description": "Bias, momentum, and 0-100 composite score",
+        "path": "/signal/:ticker",
+        "price": "$0.01 USDC per call"
+      },
+      {
+        "name": "Regime",
+        "description": "Full multi-factor market regime analysis",
+        "path": "/regime/:ticker",
+        "price": "$0.05 USDC per call"
+      },
+      {
+        "name": "Squeeze",
+        "description": "Short-squeeze pressure engine — the core differentiator",
+        "path": "/squeeze/:ticker",
+        "price": "$0.25 USDC per call"
+      }
+    ],
+    "subscription_tiers": [
+      {
+        "name": "Shadow (Delayed)",
+        "path": "/matrix/:feed/delayed",
+        "price": "free",
+        "description": "65-minute delayed data — no auth required, ideal for backtesting"
+      },
+      {
+        "name": "Standard",
+        "checkout": "/matrix/subscribe/standard",
+        "feed": "/matrix/:feed/live",
+        "price": "$250.00 USDC / 30 days",
+        "description": "Real-time feed — bearer token issued after x402 payment"
+      },
+      {
+        "name": "VIP",
+        "checkout": "/matrix/subscribe/vip",
+        "feed": "/matrix/:feed/vip",
+        "price": "$1000.00 USDC / 30 days",
+        "description": "Zero-hop priority data — lowest latency, VIP-only endpoints"
+      }
+    ],
+    "payment_chains": [
+      { "chain": "Base", "role": "primary", "prefix": "" },
+      { "chain": "Polygon", "role": "supported", "prefix": "/poly" },
+      { "chain": "Solana", "role": "supported", "prefix": "/sol" }
+    ],
+    "auth": {
+      "type": "x402 USDC micropayment → Bearer JWT",
+      "payment_asset": "USDC",
+      "token_validity": "30 days (subscription) or single-call (per-call)",
+      "no_api_key_required": true,
+      "no_human_signup_required": true
+    },
+    "response_integrity": {
+      "signing": "Ed25519",
+      "public_key_endpoint": "GET /",
+      "verify_fields": ["payload", "signature"]
+    },
+    "affiliate": {
+      "rate": "30% USDC revenue-share",
+      "attribution": "?aff=0x<wallet> or X-Affiliate-ID header",
+      "settlement": "USDC on Base",
+      "status_endpoint": "GET /affiliate/:wallet"
+    },
+    "loyalty": {
+      "tiers": ["Bronze", "Silver", "Gold", "Platinum"],
+      "mechanism": "Credits accrue per paid call — redeem for free calls",
+      "redeem_endpoint": "POST /redeem",
+      "status_endpoint": "GET /loyalty/:wallet"
+    },
+    "ap2": {
+      "supported": true,
+      "mode": "optional",
+      "header": "X-AP2-MANDATE",
+      "spec": "https://ap2-protocol.org/specification/"
+    },
+    "webhooks": {
+      "tradingview": "POST /webhook/tv",
+      "triggers": "Leviathan Snap broadcast + Discord alert"
+    },
+    "free_endpoints": [
+      "GET / — service index, public key, tier prices",
+      "GET /matrix/:feed/delayed — 65-min delayed feed (no auth)",
+      "GET /signal/:ticker/teaser — bias-only sample",
+      "GET /loyalty/:wallet — loyalty tier and credit balance",
+      "GET /affiliate/:wallet — affiliate revenue status",
+      "GET /redeem/info — redemption instructions"
+    ],
+    "target_users": [
+      "AI agents needing autonomous market data access",
+      "Algorithmic traders",
+      "Quant funds",
+      "Institutional short-squeeze desks",
+      "TradingView strategy developers"
+    ]
+  },
+  "discovery": {
+    "llms_txt": "https://sml-x402-signal-api.onrender.com/llms.txt",
+    "agents_json": "https://sml-x402-signal-api.onrender.com/agents.json",
+    "summary": "https://sml-x402-signal-api.onrender.com/ai/summary.json",
+    "faq": "https://sml-x402-signal-api.onrender.com/ai/faq.json",
+    "ai_txt": "https://sml-x402-signal-api.onrender.com/.well-known/ai.txt",
+    "ai_plugin": "https://sml-x402-signal-api.onrender.com/.well-known/ai-plugin.json",
+    "service_index": "https://sml-x402-signal-api.onrender.com/"
+  }
+}
