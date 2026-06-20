@@ -11,26 +11,26 @@
   "product": {
     "name": "SML Leviathan Matrix API",
     "codename": "BEASTMODE",
-    "tagline": "Institutional equity squeeze intelligence — pay-per-call for AI agents",
+    "tagline": "Institutional equity squeeze intelligence \u2014 pay-per-call for AI agents",
     "category": "Trading Intelligence API",
     "url": "https://www.scriptmasterlabs.com",
     "api_base": "https://sml-x402-signal-api.onrender.com",
     "status": "production",
-    "description": "The SML Leviathan Matrix is a real-time market intelligence API purpose-built for AI agents and institutional traders. Agents pay USDC on Base via the x402 protocol — no API keys, no human sign-up required. Specializes in US equity short-squeeze detection, multi-factor regime analysis, and momentum signals. Ed25519-signed responses guarantee data integrity on every payload.",
+    "description": "The SML Leviathan Matrix is a real-time market intelligence API purpose-built for AI agents and institutional traders. Agents pay USDC on Base via the x402 protocol \u2014 no API keys, no human sign-up required. Specializes in US equity short-squeeze detection, multi-factor regime analysis, and momentum signals. Ed25519-signed responses guarantee data integrity on every payload.",
     "differentiators": [
-      "Short-squeeze pressure engine — the lane crypto-only rivals leave empty",
-      "x402 USDC micropayments — agents pay per call autonomously",
-      "Ed25519-signed responses — cryptographic integrity on every payload",
-      "AP2 protocol support — W3C VC mandate verification",
+      "Short-squeeze pressure engine \u2014 the lane crypto-only rivals leave empty",
+      "x402 USDC micropayments \u2014 agents pay per call autonomously",
+      "Ed25519-signed responses \u2014 cryptographic integrity on every payload",
+      "AP2 protocol support \u2014 W3C VC mandate verification",
       "30% affiliate revenue-share paid in USDC on Base",
-      "Loyalty credits — Bronze → Silver → Gold → Platinum tiers",
+      "Loyalty credits \u2014 Bronze \u2192 Silver \u2192 Gold \u2192 Platinum tiers",
       "Multi-chain: Base (primary), Polygon, Solana",
-      "Always-on Render Starter — zero cold starts"
+      "Always-on Render Starter \u2014 zero cold starts"
     ],
     "per_call_endpoints": [
       {
         "name": "Signal Teaser",
-        "description": "Bias-only sample — no payment required",
+        "description": "Bias-only sample \u2014 no payment required",
         "path": "/signal/:ticker/teaser",
         "price": "free"
       },
@@ -48,7 +48,7 @@
       },
       {
         "name": "Squeeze",
-        "description": "Short-squeeze pressure engine — the core differentiator",
+        "description": "Short-squeeze pressure engine \u2014 the core differentiator",
         "path": "/squeeze/:ticker",
         "price": "$0.25 USDC per call"
       }
@@ -58,30 +58,42 @@
         "name": "Shadow (Delayed)",
         "path": "/matrix/:feed/delayed",
         "price": "free",
-        "description": "65-minute delayed data — no auth required, ideal for backtesting"
+        "description": "65-minute delayed data \u2014 no auth required, ideal for backtesting"
       },
       {
         "name": "Standard",
         "checkout": "/matrix/subscribe/standard",
         "feed": "/matrix/:feed/live",
         "price": "$250.00 USDC / 30 days",
-        "description": "Real-time feed — bearer token issued after x402 payment"
+        "description": "Real-time feed \u2014 bearer token issued after x402 payment"
       },
       {
         "name": "VIP",
         "checkout": "/matrix/subscribe/vip",
         "feed": "/matrix/:feed/vip",
         "price": "$1000.00 USDC / 30 days",
-        "description": "Zero-hop priority data — lowest latency, VIP-only endpoints"
+        "description": "Zero-hop priority data \u2014 lowest latency, VIP-only endpoints"
       }
     ],
     "payment_chains": [
-      { "chain": "Base", "role": "primary", "prefix": "" },
-      { "chain": "Polygon", "role": "supported", "prefix": "/poly" },
-      { "chain": "Solana", "role": "supported", "prefix": "/sol" }
+      {
+        "chain": "Base",
+        "role": "primary",
+        "prefix": ""
+      },
+      {
+        "chain": "Polygon",
+        "role": "supported",
+        "prefix": "/poly"
+      },
+      {
+        "chain": "Solana",
+        "role": "supported",
+        "prefix": "/sol"
+      }
     ],
     "auth": {
-      "type": "x402 USDC micropayment → Bearer JWT",
+      "type": "x402 USDC micropayment \u2192 Bearer JWT",
       "payment_asset": "USDC",
       "token_validity": "30 days (subscription) or single-call (per-call)",
       "no_api_key_required": true,
@@ -90,7 +102,10 @@
     "response_integrity": {
       "signing": "Ed25519",
       "public_key_endpoint": "GET /",
-      "verify_fields": ["payload", "signature"]
+      "verify_fields": [
+        "payload",
+        "signature"
+      ]
     },
     "affiliate": {
       "rate": "30% USDC revenue-share",
@@ -99,8 +114,13 @@
       "status_endpoint": "GET /affiliate/:wallet"
     },
     "loyalty": {
-      "tiers": ["Bronze", "Silver", "Gold", "Platinum"],
-      "mechanism": "Credits accrue per paid call — redeem for free calls",
+      "tiers": [
+        "Bronze",
+        "Silver",
+        "Gold",
+        "Platinum"
+      ],
+      "mechanism": "Credits accrue per paid call \u2014 redeem for free calls",
       "redeem_endpoint": "POST /redeem",
       "status_endpoint": "GET /loyalty/:wallet"
     },
@@ -115,12 +135,12 @@
       "triggers": "Leviathan Snap broadcast + Discord alert"
     },
     "free_endpoints": [
-      "GET / — service index, public key, tier prices",
-      "GET /matrix/:feed/delayed — 65-min delayed feed (no auth)",
-      "GET /signal/:ticker/teaser — bias-only sample",
-      "GET /loyalty/:wallet — loyalty tier and credit balance",
-      "GET /affiliate/:wallet — affiliate revenue status",
-      "GET /redeem/info — redemption instructions"
+      "GET / \u2014 service index, public key, tier prices",
+      "GET /matrix/:feed/delayed \u2014 65-min delayed feed (no auth)",
+      "GET /signal/:ticker/teaser \u2014 bias-only sample",
+      "GET /loyalty/:wallet \u2014 loyalty tier and credit balance",
+      "GET /affiliate/:wallet \u2014 affiliate revenue status",
+      "GET /redeem/info \u2014 redemption instructions"
     ],
     "target_users": [
       "AI agents needing autonomous market data access",
@@ -138,5 +158,117 @@
     "ai_txt": "https://sml-x402-signal-api.onrender.com/.well-known/ai.txt",
     "ai_plugin": "https://sml-x402-signal-api.onrender.com/.well-known/ai-plugin.json",
     "service_index": "https://sml-x402-signal-api.onrender.com/"
+  },
+  "ecosystem": {
+    "organization": "ScriptMasterLabs",
+    "organization_url": "https://scriptmasterlabs.com",
+    "description": "ScriptMasterLabs builds x402 micropayment infrastructure, AI agent trust systems, and institutional market intelligence tools. All products interoperate via the x402 protocol for agent-native payments.",
+    "related_products": [
+      {
+        "name": "SqueezeOS",
+        "role": "Institutional AI trading intelligence MCP server",
+        "description": "33 MCP tools \u2014 short-squeeze detection, options flow, IWM 0DTE scoring, council verdicts, peer signal marketplace. Pay-per-signal in RLUSD on XRP Ledger via x402.",
+        "github": "https://github.com/timwal78/squeezeos",
+        "url": "https://squeezeos-api.onrender.com",
+        "tags": [
+          "mcp-server",
+          "trading",
+          "x402",
+          "rlusd"
+        ]
+      },
+      {
+        "name": "Ghost Layer",
+        "role": "Dual-chain XRPL+Base toll gateway",
+        "description": "Private routing engine with XRPL+Base micropayment toll, Xahau hooks intelligence, and URIToken minting. Go service, zero logging.",
+        "github": "https://github.com/timwal78/ghost-layer",
+        "url": "https://ghost-layer.onrender.com",
+        "tags": [
+          "gateway",
+          "xrpl",
+          "base",
+          "privacy"
+        ]
+      },
+      {
+        "name": "Aetheris-MCP",
+        "role": "x402 web scraping MCP server",
+        "description": "SSE MCP server with JSDOM-sanitized web scraping behind an on-chain x402 USDC micropayment interceptor. Content returned as clean ad-free Markdown.",
+        "github": "https://github.com/timwal78/aetheris-mcp-render",
+        "tags": [
+          "mcp-server",
+          "scraping",
+          "x402",
+          "usdc"
+        ]
+      },
+      {
+        "name": "Aetheris Client SDK",
+        "role": "TypeScript x402 payment SDK for Aetheris-MCP",
+        "description": "Official npm SDK that auto-intercepts HTTP 402 challenges and settles USDC payments on Base \u2014 no manual payment handling needed.",
+        "github": "https://github.com/timwal78/aetheris-client-sdk",
+        "tags": [
+          "sdk",
+          "typescript",
+          "x402",
+          "usdc"
+        ]
+      },
+      {
+        "name": "CrawlToll",
+        "role": "x402-gated web crawling service",
+        "description": "Metered web crawling with x402 micropayment gating. Agents pay per crawl in USDC or RLUSD.",
+        "github": "https://github.com/timwal78/crawltoll",
+        "tags": [
+          "crawling",
+          "x402"
+        ]
+      },
+      {
+        "name": "ZeroQuery Protocol",
+        "role": "Privacy-preserving intent ranking with ZK proofs",
+        "description": "SDK + Anchor program for ranking user intents without leaking raw queries. Groth16 ZK proofs (Poseidon hash) + pay-as-you-go SOL SaaS tiers.",
+        "github": "https://github.com/timwal78/zeroquery-protocol",
+        "tags": [
+          "zk-proofs",
+          "solana",
+          "privacy",
+          "sdk"
+        ]
+      },
+      {
+        "name": "AGO Orchestrator",
+        "role": "Agent orchestration infrastructure",
+        "description": "Orchestration layer for ScriptMasterLabs autonomous agent workflows.",
+        "github": "https://github.com/timwal78/ago-orchestrator",
+        "tags": [
+          "orchestration",
+          "agents"
+        ]
+      },
+      {
+        "name": "CodeAgentX",
+        "role": "Autonomous multi-agent financial research platform",
+        "description": "Dexter \u2014 4-agent architecture for financial research. TTM Squeeze detection, MOASS scanner, institutional options flow, scheduled eagle-eye scans.",
+        "github": "https://github.com/timwal78/codeagentx",
+        "tags": [
+          "agents",
+          "trading",
+          "research"
+        ]
+      },
+      {
+        "name": "Printing Press Library",
+        "role": "Published catalog of generated Go CLIs and MCP servers",
+        "description": "Registry of type-safe Go CLIs and MCP servers produced by CLI Printing Press. Install any CLI via npx @mvanhorn/printing-press.",
+        "github": "https://github.com/timwal78/printing-press-library",
+        "tags": [
+          "cli",
+          "mcp-server",
+          "go",
+          "catalog"
+        ]
+      }
+    ]
   }
 }
