@@ -9,18 +9,26 @@ const registry = require('./registry');
 const app = express();
 app.use(express.json());
 
-app.get('/health', (_, res) => res.json({ status: 'ok', service: 'tipmaster-x', ts: new Date().toISOString() }));
-
-app.get('/tips', (_, res) => res.json(registry.recentTips()));
-
-app.get('/balance', async (_, res) => {
-  const b = await xrpl.getBalance();
-  res.json(b);
+// Health check — Render uses this
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', service: 'tipmaster-x', ts: new Date().toISOString() });
 });
 
-app.get('/leaderboard', (_, res) => {
+// Recent tip log (last 50)
+app.get('/tips', (req, res) => {
+  res.json(registry.recentTips());
+});
+
+// Bot wallet balances across all networks
+app.get('/balance', async (req, res) => {
+  const balance = await xrpl.getBalance();
+  res.json(balance);
+});
+
+// Tip leaderboard
+app.get('/leaderboard', (req, res) => {
   res.json({
-    topTippers:   registry.topTippers(10),
+    topTippers: registry.topTippers(10),
     topReceivers: registry.topReceivers(10),
   });
 });
@@ -28,16 +36,16 @@ app.get('/leaderboard', (_, res) => {
 async function main() {
   try {
     await xrpl.connect();
-    await depositListener.start(); // real-time deposit detection
-    poller.start();                // mention polling
+    depositListener.start();
+    poller.start();
 
-    app.listen(cfg.app.port, () =>
-      console.log(`[TipMaster X] Live on port ${cfg.app.port}`)
-    );
+    app.listen(cfg.app.port, () => {
+      console.log(`[TipMaster X] Listening on port ${cfg.app.port}`);
+    });
 
     for (const sig of ['SIGINT', 'SIGTERM']) {
       process.on(sig, async () => {
-        console.log(`[TipMaster X] ${sig} — shutting down`);
+        console.log(`[TipMaster X] ${sig} received — shutting down`);
         poller.stop();
         await xrpl.disconnect();
         process.exit(0);

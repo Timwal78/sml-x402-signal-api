@@ -4,40 +4,44 @@ const xrpl = require('./xrpl/client');
 const { reply, getRetweeters } = require('./twitter/client');
 
 async function handleMention({ tweet, authorUsername }) {
-  const text    = tweet.text.trim();
+  const text = tweet.text.trim();
   const tweetId = tweet.id;
+
   if (tweet.author_id === cfg.twitter.botUserId) return;
   console.log(`[Handler] @${authorUsername}: ${text.slice(0, 100)}`);
 
   const tipMatch = text.match(cfg.app.tipRegex);
   if (tipMatch) {
+    const recipientUsername = tipMatch[1].replace('@', '');
+    const amount = parseFloat(tipMatch[2]);
     const currency = normalizeCurrency(tipMatch[3]);
-    return handleTip({ tweetId, authorUsername, recipientUsername: tipMatch[1].replace('@',''), amount: parseFloat(tipMatch[2]), currency });
+    return handleTip({ tweetId, authorUsername, recipientUsername, amount, currency });
   }
 
   const splitMatch = text.match(cfg.app.splitRegex);
   if (splitMatch) {
-    const currency    = normalizeCurrency(splitMatch[2]);
-    const recipients  = [...splitMatch[3].matchAll(/@(\S+)/g)].map(m => m[1]);
-    return handleSplit({ tweetId, authorUsername, grossAmount: parseFloat(splitMatch[1]), currency, recipients });
+    const totalAmount = parseFloat(splitMatch[1]);
+    const currency = normalizeCurrency(splitMatch[2]);
+    const recipients = (splitMatch[3].match(/@(\S+)/g) || []).map(u => u.replace('@', ''));
+    return handleSplit({ tweetId, authorUsername, recipients, totalAmount, currency });
   }
 
   const airdropMatch = text.match(cfg.app.airdropRegex);
   if (airdropMatch) {
+    const amountEach = parseFloat(airdropMatch[1]);
     const currency = normalizeCurrency(airdropMatch[2]);
-    return handleAirdrop({ tweetId, authorUsername, grossAmount: parseFloat(airdropMatch[1]), currency, targetTweetId: airdropMatch[3] });
+    const sourceTweetId = airdropMatch[3];
+    return handleAirdrop({ tweetId, authorUsername, amountEach, currency, sourceTweetId });
   }
 
   const regMatch = text.match(cfg.app.registerRegex);
   if (regMatch) return handleRegister({ tweetId, authorUsername, userId: tweet.author_id, xrplAddress: regMatch[1] });
-
-  if (cfg.app.balanceRegex.test(text))  return handleMyBalance({ tweetId, authorUsername });
-  if (cfg.app.topupRegex.test(text))    return handleTopup({ tweetId, authorUsername });
-  if (cfg.app.historyRegex.test(text))  return handleHistory({ tweetId, authorUsername });
-  if (cfg.app.helpRegex.test(text))     return handleHelp({ tweetId });
+  if (cfg.app.balanceRegex.test(text)) return handleMyBalance({ tweetId, authorUsername });
+  if (cfg.app.topupRegex.test(text)) return handleTopup({ tweetId, authorUsername });
+  if (cfg.app.historyRegex.test(text)) return handleHistory({ tweetId, authorUsername });
+  if (cfg.app.helpRegex.test(text)) return handleHelp({ tweetId });
 }
 
-// ─── TIP ──────────────────────────────────────────────────────────────────────
 async function handleTip({ tweetId, authorUsername, recipientUsername, amount, currency }) {
   if (isNaN(amount) || amount < cfg.app.minTip)
     return safeReply(`@${authorUsername} Minimum tip is ${cfg.app.minTip}.`, tweetId);
@@ -46,216 +50,223 @@ async function handleTip({ tweetId, authorUsername, recipientUsername, amount, c
   if (recipientUsername.toLowerCase() === cfg.twitter.botUsername.toLowerCase())
     return safeReply(`@${authorUsername} Can't tip the bot 😅`, tweetId);
 
+  const bal = registry.getCurrencyBalance(authorUsername, currency);
+  if (bal < amount)
+    return safeReply(
+      `@${authorUsername} Insufficient balance (${bal.toFixed(4)} ${currency}). ` +
+      `Reply "@${cfg.twitter.botUsername} topup" to deposit.`,
+      tweetId
+    );
+
   const destAddress = registry.getWallet(recipientUsername);
-  if (!destAddress)
+  if (!destAddress) {
     return safeReply(
-      `@${authorUsername} @${recipientUsername} hasn't registered a wallet.\n@${recipientUsername}: reply @${cfg.twitter.botUsername} register rYOUR_ADDRESS`,
+      `@${authorUsername} @${recipientUsername} hasn't registered an XRPL wallet yet.\n` +
+      `@${recipientUsername} reply: @${cfg.twitter.botUsername} register rYOUR_ADDRESS`,
       tweetId
     );
+  }
 
-  const balance = registry.getCurrencyBalance(authorUsername, currency);
-  if (balance < amount)
-    return safeReply(
-      `@${authorUsername} Insufficient balance (${balance} ${currency}). ` +
-      `Send ${currency} to ${getDepositAddress(currency)} with memo: twitter:@${authorUsername}`,
-      tweetId
-    );
-
-  const fee             = parseFloat((amount * cfg.fee.tipPct).toFixed(6));
+  const fee = parseFloat((amount * cfg.fee.tipPct).toFixed(6));
   const recipientAmount = parseFloat((amount - fee).toFixed(6));
 
-  const debited = registry.debitBalance(authorUsername, currency, amount);
-  if (!debited) return safeReply(`@${authorUsername} Balance deduction failed — try again.`, tweetId);
+  if (!registry.debitBalance(authorUsername, currency, amount))
+    return safeReply(`@${authorUsername} Insufficient balance. Reply "topup" to deposit.`, tweetId);
 
   try {
     const memo = `tip @${authorUsername} -> @${recipientUsername} tweet:${tweetId}`;
     const txHash = await send(currency, destAddress, recipientAmount, memo);
-    sendFee(currency, fee, `tip-fee:${tweetId}`);
+    await sendFee(currency, fee, `fee:${tweetId}`);
 
     registry.logTip({ fromUsername: authorUsername, toUsername: recipientUsername, toAddress: destAddress, amount, currency, feeAmount: fee, txHash, tweetId });
-    console.log(`[Tip] ${authorUsername} -> ${recipientUsername} ${amount} ${currency} | tx:${txHash}`);
+    console.log(`[Tip] ${authorUsername} → ${recipientUsername} ${recipientAmount} ${currency} | fee ${fee} | tx: ${txHash}`);
 
     return safeReply(
-      `@${authorUsername} sent ${amount} ${currency} to @${recipientUsername} ✅\nTX: ${explorerUrl(currency, txHash)}`,
+      `@${authorUsername} sent ${recipientAmount} ${currency} to @${recipientUsername} ✅\nTX: ${explorerUrl(currency, txHash)}`,
       tweetId
     );
   } catch (err) {
     registry.creditBalance(authorUsername, currency, amount); // refund on failure
-    console.error('[Tip] Failed:', err.message);
-    return safeReply(`@${authorUsername} Payment failed: ${err.message.slice(0, 80)}`, tweetId);
+    console.error('[Tip] Payment failed:', err.message);
+    return safeReply(`@${authorUsername} Payment failed: ${err.message.slice(0, 100)}`, tweetId);
   }
 }
 
-// ─── SPLIT TIP ────────────────────────────────────────────────────────────────
-async function handleSplit({ tweetId, authorUsername, grossAmount, currency, recipients }) {
-  const unique = [...new Set(recipients.map(r => r.toLowerCase()))]
-    .filter(r => r !== cfg.twitter.botUsername.toLowerCase());
-  if (unique.length === 0)
-    return safeReply(`@${authorUsername} No valid recipients.`, tweetId);
+async function handleSplit({ tweetId, authorUsername, recipients, totalAmount, currency }) {
+  if (!recipients.length)
+    return safeReply(`@${authorUsername} No recipients found for split.`, tweetId);
+  if (isNaN(totalAmount) || totalAmount < cfg.app.minTip * recipients.length)
+    return safeReply(`@${authorUsername} Amount too small to split among ${recipients.length} users.`, tweetId);
 
-  const balance = registry.getCurrencyBalance(authorUsername, currency);
-  if (balance < grossAmount)
-    return safeReply(`@${authorUsername} Insufficient balance (${balance} ${currency}).`, tweetId);
-
-  const fee        = parseFloat((grossAmount * cfg.fee.tipPct).toFixed(6));
-  const netPool    = parseFloat((grossAmount - fee).toFixed(6));
-  const perPerson  = parseFloat((netPool / unique.length).toFixed(6));
-
-  if (perPerson < cfg.app.minTip)
-    return safeReply(`@${authorUsername} Per-person amount too small. Increase total or reduce recipients.`, tweetId);
-
-  if (!registry.debitBalance(authorUsername, currency, grossAmount))
-    return safeReply(`@${authorUsername} Balance deduction failed.`, tweetId);
-
-  sendFee(currency, fee, `split-fee:${tweetId}`);
-
-  let ok = 0;
-  for (const r of unique) {
-    const addr = registry.getWallet(r);
-    if (!addr) continue;
-    try {
-      const hash = await send(currency, addr, perPerson, `split from @${authorUsername}`);
-      registry.logTip({ fromUsername: authorUsername, toUsername: r, toAddress: addr, amount: perPerson, currency, feeAmount: 0, txHash: hash, tweetId });
-      ok++;
-    } catch (e) { console.error(`[Split] @${r} failed:`, e.message); }
-  }
-
-  return safeReply(`@${authorUsername} Split complete ✅ ${perPerson} ${currency} sent to ${ok}/${unique.length} recipients.`, tweetId);
-}
-
-// ─── AIRDROP ──────────────────────────────────────────────────────────────────
-async function handleAirdrop({ tweetId, authorUsername, grossAmount, currency, targetTweetId }) {
-  const balance = registry.getCurrencyBalance(authorUsername, currency);
-  if (balance < grossAmount)
+  const unregistered = recipients.filter(u => !registry.getWallet(u));
+  if (unregistered.length)
     return safeReply(
-      `@${authorUsername} Insufficient balance (${balance} ${currency}).\nTopup: @${cfg.twitter.botUsername} topup`,
+      `@${authorUsername} These users haven't registered: ${unregistered.map(u => '@' + u).join(' ')}`,
       tweetId
     );
 
-  const retweeters = await getRetweeters(targetTweetId);
-  if (retweeters.length === 0)
-    return safeReply(`@${authorUsername} No retweeters found for tweet ${targetTweetId}.`, tweetId);
+  const fee = parseFloat((totalAmount * cfg.fee.tipPct).toFixed(6));
+  const netTotal = parseFloat((totalAmount - fee).toFixed(6));
+  const amountEach = parseFloat((netTotal / recipients.length).toFixed(6));
 
-  const eligible = retweeters.filter(u => registry.getWallet(u.username));
-  if (eligible.length === 0)
-    return safeReply(`@${authorUsername} None of the ${retweeters.length} retweeters have registered wallets.`, tweetId);
+  const bal = registry.getCurrencyBalance(authorUsername, currency);
+  if (bal < totalAmount)
+    return safeReply(`@${authorUsername} Need ${totalAmount} ${currency} (you have ${bal.toFixed(4)}).`, tweetId);
 
-  const fee       = parseFloat((grossAmount * cfg.fee.tipPct).toFixed(6));
-  const netPool   = parseFloat((grossAmount - fee).toFixed(6));
-  const perPerson = parseFloat((netPool / eligible.length).toFixed(6));
+  if (!registry.debitBalance(authorUsername, currency, totalAmount))
+    return safeReply(`@${authorUsername} Insufficient balance. Reply "topup" to deposit.`, tweetId);
 
-  if (perPerson < cfg.app.minTip)
-    return safeReply(`@${authorUsername} Per-person drop (${perPerson} ${currency}) is below minimum. Increase total or target a smaller tweet.`, tweetId);
-
-  if (!registry.debitBalance(authorUsername, currency, grossAmount))
-    return safeReply(`@${authorUsername} Balance deduction failed.`, tweetId);
-
-  sendFee(currency, fee, `airdrop-fee:${tweetId}`);
-
-  let ok = 0;
-  for (const u of eligible) {
-    const addr = registry.getWallet(u.username);
+  const results = [];
+  for (const recipient of recipients) {
+    const destAddress = registry.getWallet(recipient);
     try {
-      const hash = await send(currency, addr, perPerson, `airdrop from @${authorUsername}`);
-      registry.logTip({ fromUsername: authorUsername, toUsername: u.username, toAddress: addr, amount: perPerson, currency, feeAmount: 0, txHash: hash, tweetId });
-      ok++;
-    } catch (e) { console.error(`[Airdrop] @${u.username} failed:`, e.message); }
+      const txHash = await send(currency, destAddress, amountEach, `split @${authorUsername} tweet:${tweetId}`);
+      registry.logTip({ fromUsername: authorUsername, toUsername: recipient, toAddress: destAddress, amount: amountEach, currency, feeAmount: 0, txHash, tweetId });
+      results.push(`@${recipient} ✅`);
+    } catch (err) {
+      results.push(`@${recipient} ❌`);
+      console.error(`[Split] Failed for ${recipient}:`, err.message);
+    }
   }
+  await sendFee(currency, fee, `fee-split:${tweetId}`);
 
-  registry.logAirdrop({ fromUsername: authorUsername, tweetId: targetTweetId, currency, grossAmount, feeAmount: fee, recipientCount: ok, perPerson });
   return safeReply(
-    `@${authorUsername} Airdrop complete ✅\n${perPerson} ${currency} dropped to ${ok}/${eligible.length} registered retweeters.`,
+    `@${authorUsername} Split ${amountEach} ${currency} each → ${results.join(' ')}`,
     tweetId
   );
 }
 
-// ─── REGISTER ─────────────────────────────────────────────────────────────────
+async function handleAirdrop({ tweetId, authorUsername, amountEach, currency, sourceTweetId }) {
+  if (isNaN(amountEach) || amountEach < cfg.app.minTip)
+    return safeReply(`@${authorUsername} Minimum airdrop per person is ${cfg.app.minTip}.`, tweetId);
+
+  const retweeters = await getRetweeters(sourceTweetId);
+  const eligible = retweeters.filter(u => registry.getWallet(u.username));
+  if (!eligible.length)
+    return safeReply(
+      `@${authorUsername} No registered users found among retweeters of tweet:${sourceTweetId}.`,
+      tweetId
+    );
+
+  const gross = parseFloat((amountEach * eligible.length * (1 + cfg.fee.tipPct)).toFixed(6));
+  const fee = parseFloat((amountEach * eligible.length * cfg.fee.tipPct).toFixed(6));
+
+  const bal = registry.getCurrencyBalance(authorUsername, currency);
+  if (bal < gross)
+    return safeReply(
+      `@${authorUsername} Need ${gross} ${currency} for ${eligible.length} retweeters. You have ${bal.toFixed(4)}.`,
+      tweetId
+    );
+
+  if (!registry.debitBalance(authorUsername, currency, gross))
+    return safeReply(`@${authorUsername} Insufficient balance.`, tweetId);
+
+  let sent = 0;
+  for (const user of eligible) {
+    const destAddress = registry.getWallet(user.username);
+    try {
+      await send(currency, destAddress, amountEach, `airdrop @${authorUsername} tweet:${sourceTweetId}`);
+      registry.logTip({ fromUsername: authorUsername, toUsername: user.username, toAddress: destAddress, amount: amountEach, currency, feeAmount: 0, txHash: null, tweetId });
+      sent++;
+    } catch (err) {
+      console.error(`[Airdrop] Failed for ${user.username}:`, err.message);
+    }
+  }
+  await sendFee(currency, fee, `fee-airdrop:${tweetId}`);
+  registry.logAirdrop({ fromUsername: authorUsername, recipientCount: sent, amountEach, currency, sourceTweetId });
+
+  return safeReply(
+    `@${authorUsername} Airdropped ${amountEach} ${currency} to ${sent}/${eligible.length} retweeters ✅`,
+    tweetId
+  );
+}
+
 async function handleRegister({ tweetId, authorUsername, userId, xrplAddress }) {
   if (!/^r[A-Za-z0-9]{24,34}$/.test(xrplAddress))
     return safeReply(`@${authorUsername} Invalid address — must start with 'r'.`, tweetId);
   registry.registerWallet(authorUsername, userId, xrplAddress);
-  console.log(`[Register] @${authorUsername} -> ${xrplAddress}`);
-  return safeReply(`@${authorUsername} Wallet registered ✅ You can now receive RLUSD, XAH, and XRP tips.`, tweetId);
+  console.log(`[Register] @${authorUsername} → ${xrplAddress}`);
+  return safeReply(`@${authorUsername} Registered! ✅ You can now receive RLUSD, XAH, and XRP tips.`, tweetId);
 }
 
-// ─── MY BALANCE ───────────────────────────────────────────────────────────────
 async function handleMyBalance({ tweetId, authorUsername }) {
-  const b = registry.getUserBalance(authorUsername);
+  const bal = registry.getUserBalance(authorUsername);
   return safeReply(
-    `@${authorUsername} Your TipMaster X balance:\n` +
-    `RLUSD: ${b.RLUSD} | XAH: ${b.XAH} | XRP: ${b.XRP}\n` +
-    `To top up: @${cfg.twitter.botUsername} topup`,
+    `@${authorUsername} Your TipMaster balance:\n` +
+    `RLUSD: ${bal.RLUSD.toFixed(4)}\n` +
+    `XRP:   ${bal.XRP.toFixed(4)}\n` +
+    `XAH:   ${bal.XAH.toFixed(4)}\n` +
+    `Reply "topup" to deposit more.`,
     tweetId
   );
 }
 
-// ─── TOPUP ────────────────────────────────────────────────────────────────────
 async function handleTopup({ tweetId, authorUsername }) {
+  const addr = { xrpl: cfg.xrpl.address, xahau: cfg.xahau.address };
   return safeReply(
-    `@${authorUsername} To load your tip balance, send RLUSD/XRP to:\n` +
-    `${cfg.xrpl.address}\n` +
-    `With memo: twitter:@${authorUsername}\n\n` +
-    `For XAH send to: ${cfg.xahau.address}\n` +
-    `1% deposit fee applies. Funds credited instantly.`,
+    `@${authorUsername} To top up:\n` +
+    `RLUSD/XRP → ${addr.xrpl}\n` +
+    `XAH → ${addr.xahau}\n` +
+    `Memo: twitter:@${authorUsername}\n` +
+    `(1% deposit fee applies, credited in ~10s)`,
     tweetId
   );
 }
 
-// ─── HISTORY ──────────────────────────────────────────────────────────────────
 async function handleHistory({ tweetId, authorUsername }) {
-  const rows = registry.userHistory(authorUsername);
-  if (rows.length === 0)
-    return safeReply(`@${authorUsername} No tip history yet.`, tweetId);
-  const lines = rows.map(r =>
-    r.from_username === authorUsername.toLowerCase()
-      ? `↑ ${r.amount} ${r.currency} to @${r.to_username}`
-      : `↓ ${r.amount} ${r.currency} from @${r.from_username}`
-  );
-  return safeReply(`@${authorUsername} Recent tips:\n${lines.join('\n')}`, tweetId);
+  const { sent, received } = registry.userHistory(authorUsername);
+  const all = [
+    ...sent.map(t => `${t.amount} ${t.currency} → @${t.to_username}`),
+    ...received.map(t => `${t.amount} ${t.currency} ← @${t.from_username}`),
+  ].slice(0, 5);
+  const msg = all.length ? all.join('\n') : 'No tip history yet.';
+  return safeReply(`@${authorUsername} Recent tips:\n${msg}`, tweetId);
 }
 
-// ─── HELP ─────────────────────────────────────────────────────────────────────
 async function handleHelp({ tweetId }) {
-  const b = `@${cfg.twitter.botUsername}`;
+  const bot = `@${cfg.twitter.botUsername}`;
   return safeReply(
-    `TipMaster X\n` +
-    `${b} tip @user 5 RLUSD\n` +
-    `${b} split 20 RLUSD @user1 @user2\n` +
-    `${b} airdrop 100 RLUSD tweet:ID\n` +
-    `${b} register rADDRESS\n` +
-    `${b} topup | balance | history`,
+    `TipMaster X — tip on X.com\n\n` +
+    `Tip:     ${bot} tip @user 5 RLUSD\n` +
+    `Split:   ${bot} split 10 RLUSD @u1 @u2\n` +
+    `Airdrop: ${bot} airdrop 2 RLUSD tweet:ID\n` +
+    `Deposit: ${bot} topup\n` +
+    `Balance: ${bot} balance\n` +
+    `History: ${bot} history\n` +
+    `Reg:     ${bot} register rADDRESS`,
     tweetId
   );
 }
 
-// ─── UTILS ────────────────────────────────────────────────────────────────────
+// --- helpers ---
+
 function normalizeCurrency(raw) {
   if (!raw) return cfg.app.defaultCurrency;
   const c = raw.toUpperCase().replace('$', '');
-  return ['RLUSD', 'XAH', 'XRP'].includes(c) ? c : cfg.app.defaultCurrency;
+  return ['XAH', 'XRP', 'RLUSD'].includes(c) ? c : cfg.app.defaultCurrency;
 }
 
-function getDepositAddress(currency) {
-  return currency === 'XAH' ? cfg.xahau.address : cfg.xrpl.address;
-}
-
-function explorerUrl(currency, hash) {
+function explorerUrl(currency, txHash) {
   return currency === 'XAH'
-    ? `https://xahauexplorer.com/tx/${hash}`
-    : `https://livenet.xrpl.org/transactions/${hash}`;
+    ? `https://xahauexplorer.com/tx/${txHash}`
+    : `https://livenet.xrpl.org/transactions/${txHash}`;
 }
 
-async function send(currency, dest, amount, memo) {
-  if (currency === 'RLUSD') return xrpl.sendRLUSD(dest, amount, memo);
-  if (currency === 'XAH')   return xrpl.sendXAH(dest, amount, memo);
-  return xrpl.sendXRP(dest, amount, memo);
+async function send(currency, destination, amount, memo) {
+  if (currency === 'RLUSD') return xrpl.sendRLUSD(destination, amount, memo);
+  if (currency === 'XAH') return xrpl.sendXAH(destination, amount, memo);
+  return xrpl.sendXRP(destination, amount, memo);
 }
 
-function sendFee(currency, fee, memo) {
+async function sendFee(currency, fee, memo) {
   if (fee <= 0) return;
-  const wallet = currency === 'XAH' ? cfg.fee.walletXahau : cfg.fee.walletXrpl;
-  if (!wallet) return;
-  send(currency, wallet, fee, memo).catch(e => console.error('[Fee] Forward failed:', e.message));
+  try {
+    if (currency === 'XAH' && cfg.fee.walletXahau) await xrpl.sendXAH(cfg.fee.walletXahau, fee, memo);
+    else if (currency === 'XRP' && cfg.fee.walletXrpl) await xrpl.sendXRP(cfg.fee.walletXrpl, fee, memo);
+    else if (currency === 'RLUSD' && cfg.fee.walletXrpl) await xrpl.sendRLUSD(cfg.fee.walletXrpl, fee, memo);
+  } catch (err) {
+    console.error('[Fee] Forward failed:', err.message);
+  }
 }
 
 async function safeReply(text, tweetId) {

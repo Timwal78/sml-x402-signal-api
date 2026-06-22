@@ -1,82 +1,74 @@
-// Listens for incoming XRPL/Xahau payments to the bot's address.
-// Parses the Twitter handle from the tx memo, credits the user's balance,
-// and forwards the deposit fee (cut 1) to the treasury wallet.
+// Real-time deposit listener — subscribes to both XRPL and Xahau network wallets.
+// When a payment arrives with a Twitter handle in the memo, credits the user's balance
+// after taking the 1% deposit fee.
 const { convertHexToString } = require('xrpl');
-const cfg = require('../config');
-const registry = require('../registry');
 const xrplClient = require('./client');
+const registry = require('../registry');
+const cfg = require('../config');
 
-async function start() {
-  await xrplClient.subscribeDeposits(handleTx);
-  console.log('[Deposit] Listening for incoming deposits on XRPL + Xahau');
+function parseMemoHandle(tx) {
+  try {
+    const memos = tx.transaction?.Memos || [];
+    for (const { Memo } of memos) {
+      if (!Memo?.MemoData) continue;
+      const text = convertHexToString(Memo.MemoData);
+      // Accept: "twitter:@username" or "twitter:username" or bare "@username"
+      const m = text.match(/twitter:@?(\w+)/i) || text.match(/@(\w+)/);
+      if (m) return m[1].toLowerCase();
+    }
+  } catch {}
+  return null;
 }
 
-async function handleTx(network, data) {
-  const tx   = data.transaction || data;
-  const meta = data.meta;
+function parseAmount(tx, networkName) {
+  const amt = tx.transaction.Amount;
+  if (typeof amt === 'string') {
+    const currency = networkName === 'xahau' ? 'XAH' : 'XRP';
+    return { amount: parseFloat(amt) / 1_000_000, currency };
+  }
+  // IOU (e.g. RLUSD): currency code 'USD' maps to display name 'RLUSD'
+  return { amount: parseFloat(amt.value), currency: amt.currency === 'USD' ? 'RLUSD' : amt.currency };
+}
 
-  if (tx.TransactionType !== 'Payment') return;
-
-  const botAddr = network === 'xahau' ? cfg.xahau.address : cfg.xrpl.address;
-  if (tx.Destination !== botAddr) return;
-  if (meta?.TransactionResult !== 'tesSUCCESS') return;
-
-  // Dedup: prefix 'deposit:' so it doesn't collide with tweet IDs
-  const dedupKey = `deposit:${tx.hash}`;
+async function handleTx(networkName, tx) {
+  const txHash = tx.transaction.hash || tx.transaction.TxHash;
+  const dedupKey = `deposit:${txHash}`;
   if (registry.isProcessed(dedupKey)) return;
   registry.markProcessed(dedupKey);
 
-  const handle = parseMemo(tx.Memos);
-  if (!handle) {
-    console.log(`[Deposit:${network}] No Twitter handle in memo — tx ${tx.hash}`);
+  const username = parseMemoHandle(tx);
+  if (!username) {
+    console.log(`[Deposit] No Twitter handle in memo — tx ${txHash} (unattributed)`);
     return;
   }
 
-  const { currency, grossAmount } = parseAmount(tx.Amount, network);
-  if (!currency || grossAmount <= 0) return;
+  const { amount, currency } = parseAmount(tx, networkName);
+  const fee = cfg.fee.depositPct > 0 ? parseFloat((amount * cfg.fee.depositPct).toFixed(6)) : 0;
+  const netAmount = parseFloat((amount - fee).toFixed(6));
 
-  const fee       = cfg.fee.depositPct > 0 ? parseFloat((grossAmount * cfg.fee.depositPct).toFixed(6)) : 0;
-  const netAmount = parseFloat((grossAmount - fee).toFixed(6));
+  registry.creditBalance(username, currency, netAmount);
+  registry.logDeposit({ username, xrplAddress: tx.transaction.Account, amount, currency, feeAmount: fee, txHash });
 
-  registry.creditBalance(handle, currency, netAmount);
-  registry.logDeposit({ twitterUsername: handle, fromXrpl: tx.Account, currency, grossAmount, feeAmount: fee, netAmount, txHash: tx.hash });
+  console.log(`[Deposit] @${username} +${netAmount} ${currency} (fee ${fee}) | tx: ${txHash}`);
 
-  console.log(`[Deposit:${network}] @${handle} +${netAmount} ${currency} (fee ${fee}) tx:${tx.hash}`);
-
-  // Forward deposit fee to treasury (cut 1)
   if (fee > 0) {
-    const feeWallet = network === 'xahau' ? cfg.fee.walletXahau : cfg.fee.walletXrpl;
-    if (feeWallet) {
-      const send = currency === 'XAH' ? xrplClient.sendXAH
-                 : currency === 'RLUSD' ? xrplClient.sendRLUSD
-                 : xrplClient.sendXRP;
-      send(feeWallet, fee, `deposit-fee:${tx.hash}`).catch(e =>
-        console.error('[Deposit] Fee forward failed:', e.message)
-      );
+    const { sendXRP, sendXAH, sendRLUSD } = require('./client');
+    const memo = `deposit-fee:${txHash}`;
+    try {
+      if (currency === 'XAH' && cfg.fee.walletXahau) await sendXAH(cfg.fee.walletXahau, fee, memo);
+      else if (currency === 'XRP' && cfg.fee.walletXrpl) await sendXRP(cfg.fee.walletXrpl, fee, memo);
+      else if (currency === 'RLUSD' && cfg.fee.walletXrpl) await sendRLUSD(cfg.fee.walletXrpl, fee, memo);
+    } catch (err) {
+      console.error('[Deposit] Fee forward failed:', err.message);
     }
   }
 }
 
-function parseMemo(memos) {
-  if (!memos?.length) return null;
-  for (const m of memos) {
-    try {
-      const txt = convertHexToString(m.Memo?.MemoData || '');
-      const match = txt.match(/twitter:@?(\w+)/i) || txt.match(/@(\w+)/);
-      if (match) return match[1].toLowerCase();
-    } catch {}
-  }
-  return null;
-}
-
-function parseAmount(amount, network) {
-  if (typeof amount === 'string') {
-    return { currency: network === 'xahau' ? 'XAH' : 'XRP', grossAmount: parseInt(amount, 10) / 1_000_000 };
-  }
-  if (typeof amount === 'object') {
-    return { currency: amount.currency === 'USD' ? 'RLUSD' : amount.currency, grossAmount: parseFloat(amount.value) };
-  }
-  return { currency: null, grossAmount: 0 };
+function start() {
+  xrplClient.subscribeDeposits(handleTx).catch((err) => {
+    console.error('[Deposit] Subscribe failed:', err.message);
+  });
+  console.log('[Deposit] Listener started');
 }
 
 module.exports = { start };
