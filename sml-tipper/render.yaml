@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: tipmaster-x
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: POLL_INTERVAL_MS
+        value: "15000"
+      - key: DB_PATH
+        value: "./data/registry.db"
+      - key: XRPL_NETWORK
+        value: "mainnet"
+      - key: XRPL_NODE
+        value: "wss://xrplcluster.com"
+      - key: MIN_TIP
+        value: "0.01"
+      - key: MAX_TIP
+        value: "1000"
+      # Set as secrets in Render dashboard:
+      # TWITTER_BEARER_TOKEN, TWITTER_API_KEY, TWITTER_API_SECRET,
+      # TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_SECRET, TWITTER_BOT_USERNAME,
+      # TWITTER_BOT_USER_ID, XRPL_SEED, XRPL_ADDRESS, RLUSD_ISSUER
+    disk:
+      name: tipmaster-x-data
+      mountPath: /app/data
+      sizeGB: 1
