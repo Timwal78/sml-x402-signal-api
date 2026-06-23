@@ -34,27 +34,33 @@ app.get('/leaderboard', (req, res) => {
 });
 
 async function main() {
-  try {
-    await xrpl.connect();
-    depositListener.start();
-    poller.start();
-
+  // Bind the HTTP server first so Render's health check passes immediately
+  await new Promise((resolve) => {
     app.listen(cfg.app.port, () => {
       console.log(`[TipMaster X] Listening on port ${cfg.app.port}`);
+      resolve();
     });
+  });
 
-    for (const sig of ['SIGINT', 'SIGTERM']) {
-      process.on(sig, async () => {
-        console.log(`[TipMaster X] ${sig} received — shutting down`);
-        poller.stop();
-        await xrpl.disconnect();
-        process.exit(0);
-      });
-    }
-  } catch (err) {
-    console.error('[TipMaster X] Startup failed:', err);
-    process.exit(1);
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, async () => {
+      console.log(`[TipMaster X] ${sig} received — shutting down`);
+      poller.stop();
+      await xrpl.disconnect();
+      process.exit(0);
+    });
   }
+
+  // Connect to XRPL networks and start services in the background
+  xrpl.connect()
+    .then(() => {
+      depositListener.start();
+      poller.start();
+    })
+    .catch((err) => {
+      console.error('[TipMaster X] XRPL connect failed:', err.message);
+      process.exit(1);
+    });
 }
 
 main();
