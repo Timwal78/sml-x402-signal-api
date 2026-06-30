@@ -1,66 +1,15 @@
-# SML Leviathan Matrix API
-> Institutional equity squeeze intelligence. Subscription-based. USDC on Base, Polygon, and Solana.
+# sml-x402-signal-api
 
-## What This Is
-The SML Leviathan Matrix is a real-time market intelligence service for AI agents and institutional traders. It is NOT a per-ticker API. Access is via a subscription bearer token (30-day).
+> x402 signal API by ScriptMasterLabs. Live trading signals gated by RLUSD micropayments.
 
-## Connect
-- Base URL: https://sml-x402-signal-api.onrender.com (or your deployed instance)
-- Asset: USDC (6 decimals)
-- Response signing: Ed25519 — verify every response with the public key from GET /
+This repository is part of the ScriptMasterLabs sovereign AI ecosystem.
 
-## Subscription Flow (to get a bearer token)
-1. POST payment to the subscription endpoint via x402 protocol:
-   - Standard (real-time): GET /matrix/subscribe/standard — $250.00 USDC / 30 days
-   - VIP (zero-hop priority): GET /matrix/subscribe/vip — $1000.00 USDC / 30 days
-2. Receive a signed JSON response with { token, tier, expiresAt }
-3. Use the token as Authorization: Bearer <token> on all /matrix/:feed/* calls
+## Agent Discovery
 
-## Multi-Chain Payment Support
-All EVM chains use the same 0x wallet address.
-- Base (primary): GET /matrix/subscribe/standard
-- Polygon: GET /poly/matrix/subscribe/standard
-- Solana (optional): GET /sol/matrix/subscribe/standard
+- Master llms.txt: https://www.scriptmasterlabs.com/llms.txt
+- Agent quickstart: https://www.scriptmasterlabs.com/agent-start.html
+- OpenAPI spec: https://www.scriptmasterlabs.com/.well-known/openapi.json
 
-## Authenticated Routes (Bearer token required)
-- GET /matrix/:feed/live — Standard tier. Real-time target data for the requested feed.
-- GET /matrix/:feed/vip — VIP tier only. Zero-hop priority data.
+## Data Policy
 
-## Free Routes (no payment)
-- GET /matrix/:feed/delayed — 65-minute delayed data. No auth required.
-- GET /loyalty/:wallet — Loyalty tier + credits for a wallet address
-- GET /affiliate/:wallet — Affiliate revenue-share status and referral link
-- GET /redeem/info — Instructions to redeem loyalty credits for free calls
-- POST /redeem — Redeem loyalty credits (requires signed message)
-- GET / — Service index: available chains, tier prices, trust metadata
-
-## Affiliate Program
-Append ?aff=0x<wallet> to any paid call to attribute the referral.
-Or send header X-Affiliate-ID: 0x<wallet>
-
-## Loyalty Credits
-Each paid call accrues loyalty credits. Redeem with POST /redeem for free calls.
-Tiers: Bronze → Silver → Gold → Platinum (affect creditsAvailable per call)
-
-## AP2 (Google Agent Payments Protocol)
-Native AP2 mandate verification on payment routes.
-Send X-AP2-MANDATE header with a base64-encoded W3C VC bundle.
-AP2_MODE env: "off" | "optional" (default) | "required"
-Spec: https://ap2-protocol.org/specification/
-
-## Response Integrity
-All paid responses are Ed25519-signed. The public key is available at GET /.
-Verify with: { payload, signature } fields in every response.
-
-## TradingView Webhook Receiver
-POST /webhook/tv or POST /api/tv/:feed/webhook
-Set TV_WEBHOOK_SECRET env var to validate incoming webhooks.
-Triggers a Leviathan Snap broadcast and Discord alert.
-
-## Referral Attribution
-Add ?ref=0x<wallet> to any paid call to track referral (for the referring wallet's loyalty).
-
-## Built by ScriptMasterLabs (SDVOSB)
-GitHub: https://github.com/Timwal78/sml-x402-signal-api
-Ecosystem: https://www.scriptmasterlabs.com
-Contact: ScriptMasterLabs@gmail.com
+All data is live and real. No mock, demo, simulation, or placeholder data is permitted anywhere in this codebase.
